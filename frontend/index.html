@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Modern inventory management system with real-time tracking and analytics" />
+    <meta name="theme-color" content="#6366f1" />
+    
+    <!-- Preload fonts for better performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <title>IMS - Inventory Management System</title>
+    
+    <style>
+      /* Prevent flash of unstyled content */
+      body {
+        visibility: hidden;
+        opacity: 0;
+      }
+      
+      body.loaded {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out;
+      }
+      
+      /* Loading screen */
+      #initial-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease-in-out;
+      }
+      
+      .loader-content {
+        text-align: center;
+        color: white;
+      }
+      
+      .loader-spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 16px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Initial loading screen -->
+    <div id="initial-loader">
+      <div class="loader-content">
+        <div class="loader-spinner"></div>
+        <h2 style="font-size: 1.5rem; font-weight: 600; margin: 0;">IMS</h2>
+        <p style="font-size: 0.875rem; margin: 8px 0 0; opacity: 0.8;">Loading your inventory system...</p>
+      </div>
+    </div>
+    
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <script>
+      // Remove loading screen when page is loaded
+      window.addEventListener('load', () => {
+        const loader = document.getElementById('initial-loader');
+        const body = document.body;
+        
+        setTimeout(() => {
+          if (loader) {
+            loader.style.opacity = '0';
+            setTimeout(() => {
+              loader.remove();
+              body.classList.add('loaded');
+            }, 300);
+          }
+        }, 1000); // Show loader for at least 1 second
+      });
+    </script>
+  </body>
+</html>
