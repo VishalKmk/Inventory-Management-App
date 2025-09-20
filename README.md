@@ -347,7 +347,7 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](LI
 
 ## 📞 Contact
 
-**Vishal Kumar**
+**Vishal Karmakar**
 - **GitHub**: [@VishalKmk](https://github.com/VishalKmk)
 - **Email**: bishalkarmakar2468@gmail.com
 
