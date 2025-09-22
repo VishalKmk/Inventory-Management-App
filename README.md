@@ -53,7 +53,6 @@ A modern, full-stack inventory management application built with React and Sprin
 - **Account Management**: User profile management and session control
 
 ### 📈 Monitoring & Insights
-- **Real-time Alerts**: Low stock notifications with severity levels
 - **Inventory Trends**: Historical data and trend analysis
 - **Audit Logging**: Complete activity tracking for all operations
 - **Recent Activity**: Dashboard showing recent inventory changes
