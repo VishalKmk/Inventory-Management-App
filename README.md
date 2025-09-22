@@ -65,7 +65,6 @@ A modern, full-stack inventory management application built with React and Sprin
 ### Frontend
 - **React 18** with Vite for fast development
 - **Modern JavaScript (ES6+)**
-- **Responsive Design** with CSS modules
 - **Component-based Architecture**
 
 ### Backend
