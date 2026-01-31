@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -41,8 +42,8 @@ public class AuditLogService {
      * Create an audit log entry
      */
     public void logAction(UUID userId, String entityType, UUID entityId, String operation,
-            Object changeDetails, String ipAddress, String userAgent,
-            UUID relatedEntityId, String relatedEntityType) {
+                          Object changeDetails, String ipAddress, String userAgent,
+                          UUID relatedEntityId, String relatedEntityType) {
         try {
             AuditLog auditLog = new AuditLog();
             auditLog.setUserId(userId);
@@ -165,9 +166,9 @@ public class AuditLogService {
     }
 
     /**
-     * Get activity trends for analytics
+     * Get activity trends for analytics - returns DTO
      */
-    public Map<String, Object> getActivityTrends(UUID userId, int days) {
+    public ActivityTrendsDto getActivityTrends(UUID userId, int days) {
         LocalDateTime startDate = LocalDateTime.now().minusDays(days);
         LocalDateTime endDate = LocalDateTime.now();
 
@@ -185,11 +186,25 @@ public class AuditLogService {
                         AuditLog::getOperation,
                         Collectors.counting()));
 
+        return new ActivityTrendsDto(
+                dailyActivity,
+                operationBreakdown,
+                logs.getTotalElements(),
+                days + " days"
+        );
+    }
+
+    /**
+     * Get activity trends for analytics - returns Map (for backward compatibility with DashboardService)
+     */
+    public Map<String, Object> getActivityTrendsAsMap(UUID userId, int days) {
+        ActivityTrendsDto dto = getActivityTrends(userId, days);
+
         Map<String, Object> trends = new HashMap<>();
-        trends.put("dailyActivity", dailyActivity);
-        trends.put("operationBreakdown", operationBreakdown);
-        trends.put("totalActivities", logs.getTotalElements());
-        trends.put("period", days + " days");
+        trends.put("dailyActivity", dto.getDailyActivity());
+        trends.put("operationBreakdown", dto.getOperationBreakdown());
+        trends.put("totalActivities", dto.getTotalActivities());
+        trends.put("period", dto.getPeriod());
 
         return trends;
     }

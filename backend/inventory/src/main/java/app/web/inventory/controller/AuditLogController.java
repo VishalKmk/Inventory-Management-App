@@ -1,17 +1,18 @@
 package app.web.inventory.controller;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.audit.*;
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
+import app.web.inventory.dto.pagination.PaginationDto;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.config.SecurityUtil;
-import app.web.inventory.dto.audit.AuditLogDto;
-import app.web.inventory.dto.audit.AuditLogFilterRequest;
 import app.web.inventory.service.AuditLogService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,7 +32,7 @@ public class AuditLogController {
      * GET /api/audit-logs
      */
     @GetMapping
-    public ResponseEntity<?> getAuditLogs(
+    public ResponseEntity<ApiResponse<AuditLogListDto>> getAuditLogs(
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) String operation,
             @RequestParam(required = false) UUID entityId,
@@ -58,21 +59,23 @@ public class AuditLogController {
 
             Page<AuditLogDto> auditLogs = auditLogService.getAuditLogs(currentUserId, request);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", auditLogs.getContent(),
-                    "pagination", Map.of(
-                            "page", auditLogs.getNumber(),
-                            "size", auditLogs.getSize(),
-                            "totalElements", auditLogs.getTotalElements(),
-                            "totalPages", auditLogs.getTotalPages(),
-                            "hasNext", auditLogs.hasNext(),
-                            "hasPrevious", auditLogs.hasPrevious())));
+            PaginationDto pagination = new PaginationDto(
+                    auditLogs.getNumber(),
+                    auditLogs.getSize(),
+                    auditLogs.getTotalElements(),
+                    auditLogs.getTotalPages(),
+                    auditLogs.hasNext(),
+                    auditLogs.hasPrevious()
+            );
+
+            AuditLogListDto response = new AuditLogListDto(auditLogs.getContent(), pagination);
+
+            return ResponseEntity.ok(ApiResponse.success(response));
 
         } catch (Exception ex) {
             log.error("Error retrieving audit logs", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -81,19 +84,17 @@ public class AuditLogController {
      * GET /api/audit-logs/summary
      */
     @GetMapping("/summary")
-    public ResponseEntity<?> getAuditLogSummary() {
+    public ResponseEntity<ApiResponse<AuditLogSummaryDto>> getAuditLogSummary() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var summary = auditLogService.getAuditLogSummary(currentUserId);
+            AuditLogSummaryDto summary = auditLogService.getAuditLogSummary(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", summary));
+            return ResponseEntity.ok(ApiResponse.success(summary));
 
         } catch (Exception ex) {
             log.error("Error retrieving audit log summary", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -102,22 +103,21 @@ public class AuditLogController {
      * GET /api/audit-logs/recent
      */
     @GetMapping("/recent")
-    public ResponseEntity<?> getRecentActivity(
+    public ResponseEntity<ApiResponse<java.util.List<AuditLogDto>>> getRecentActivity(
             @RequestParam(defaultValue = "24") int hours) {
 
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var recentActivity = auditLogService.getRecentActivity(currentUserId, hours);
+            java.util.List<AuditLogDto> recentActivity = auditLogService.getRecentActivity(currentUserId, hours);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", recentActivity,
-                    "message", "Recent activity from last " + hours + " hours"));
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Recent activity from last " + hours + " hours",
+                    recentActivity));
 
         } catch (Exception ex) {
             log.error("Error retrieving recent activity", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -126,21 +126,19 @@ public class AuditLogController {
      * GET /api/audit-logs/trends
      */
     @GetMapping("/trends")
-    public ResponseEntity<?> getActivityTrends(
+    public ResponseEntity<ApiResponse<ActivityTrendsDto>> getActivityTrends(
             @RequestParam(defaultValue = "30") int days) {
 
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var trends = auditLogService.getActivityTrends(currentUserId, days);
+            ActivityTrendsDto trends = (ActivityTrendsDto) auditLogService.getActivityTrends(currentUserId, days);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", trends));
+            return ResponseEntity.ok(ApiResponse.success(trends));
 
         } catch (Exception ex) {
             log.error("Error retrieving activity trends", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -149,21 +147,21 @@ public class AuditLogController {
      * GET /api/audit-logs/filters
      */
     @GetMapping("/filters")
-    public ResponseEntity<?> getFilterOptions() {
+    public ResponseEntity<ApiResponse<FilterOptionsDto>> getFilterOptions() {
         try {
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", Map.of(
-                            "entityTypes", new String[] { "SPACE", "PRODUCT", "USER" },
-                            "operations",
-                            new String[] { "CREATE", "UPDATE", "DELETE", "STOCK_ADD", "STOCK_REMOVE", "STOCK_UPDATE" },
-                            "sortByOptions", new String[] { "timestamp", "entityType", "operation" },
-                            "sortDirections", new String[] { "ASC", "DESC" })));
+            FilterOptionsDto filterOptions = new FilterOptionsDto(
+                    new String[]{"SPACE", "PRODUCT", "USER"},
+                    new String[]{"CREATE", "UPDATE", "DELETE", "STOCK_ADD", "STOCK_REMOVE", "STOCK_UPDATE"},
+                    new String[]{"timestamp", "entityType", "operation"},
+                    new String[]{"ASC", "DESC"}
+            );
+
+            return ResponseEntity.ok(ApiResponse.success(filterOptions));
 
         } catch (Exception ex) {
             log.error("Error retrieving filter options", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 }
