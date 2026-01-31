@@ -1,4 +1,4 @@
-package app.web.inventory.dto;
+package app.web.inventory.dto.space;
 
 import java.util.UUID;
 

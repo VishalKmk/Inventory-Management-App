@@ -17,9 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import app.web.inventory.dto.AuditLogDto;
-import app.web.inventory.dto.AuditLogFilterRequest;
-import app.web.inventory.dto.AuditLogSummaryDto;
+import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.audit.AuditLogFilterRequest;
+import app.web.inventory.dto.audit.AuditLogSummaryDto;
 import app.web.inventory.model.AuditLog;
 import app.web.inventory.repository.AuditLogRepository;
 import lombok.extern.slf4j.Slf4j;

@@ -1,5 +1,7 @@
 package app.web.inventory.controller;
 
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.user.UserResponseDto;
 import app.web.inventory.model.Users;
 import app.web.inventory.service.UserService;
 import org.springframework.http.ResponseEntity;
@@ -19,11 +21,15 @@ public class UserController {
         this.userService = userService;
     }
 
-    // Get current logged-in user (from Authentication)
+    /**
+     * Get current logged-in user
+     * GET /api/users/me
+     */
     @GetMapping("/me")
-    public ResponseEntity<?> getUser(Authentication authentication) {
+    public ResponseEntity<ApiResponse<UserResponseDto>> getUser(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
-            return ResponseEntity.status(401).body(Map.of("success", false, "message", "Unauthorized"));
+            return ResponseEntity.status(401)
+                    .body(ApiResponse.error("Unauthorized"));
         }
 
         String email;
@@ -36,18 +42,18 @@ public class UserController {
 
         Optional<Users> userOpt = userService.findByEmail(email);
         if (userOpt.isEmpty()) {
-            return ResponseEntity.status(404).body(Map.of("success", false, "message", "User not found"));
+            return ResponseEntity.status(404)
+                    .body(ApiResponse.error("User not found"));
         }
 
         Users user = userOpt.get();
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "data", Map.of(
-                        "id", user.getId(),
-                        "email", user.getEmail(),
-                        "name", user.getName(),
-                        "verified", user.isVerified(),
-                        "createdAt", user.getCreatedAt())));
-    }
+        UserResponseDto userDto = new UserResponseDto(
+                user.getId(),
+                user.getEmail(),
+                user.getName(),
+                user.isVerified(),
+                user.getCreatedAt());
 
+        return ResponseEntity.ok(ApiResponse.success(userDto));
+    }
 }

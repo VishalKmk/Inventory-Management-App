@@ -10,8 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.config.SecurityUtil;
-import app.web.inventory.dto.AuditLogDto;
-import app.web.inventory.dto.AuditLogFilterRequest;
+import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.audit.AuditLogFilterRequest;
 import app.web.inventory.service.AuditLogService;
 import lombok.extern.slf4j.Slf4j;
 

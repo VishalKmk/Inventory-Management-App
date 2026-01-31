@@ -1,4 +1,4 @@
-package app.web.inventory.dto;
+package app.web.inventory.dto.audit;
 
 import java.time.LocalDateTime;
 import java.util.UUID;

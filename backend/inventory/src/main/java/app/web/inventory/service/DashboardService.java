@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import app.web.inventory.dto.AuditLogDto;
-import app.web.inventory.dto.SpaceDto;
+import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.space.SpaceDto;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
 

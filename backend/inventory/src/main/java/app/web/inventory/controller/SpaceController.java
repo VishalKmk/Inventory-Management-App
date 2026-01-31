@@ -1,13 +1,15 @@
 package app.web.inventory.controller;
 
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.space.*;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.config.SecurityUtil;
-import app.web.inventory.model.Spaces;
 import app.web.inventory.service.SpaceService;
 
 @RestController
@@ -22,174 +24,79 @@ public class SpaceController {
 
     /**
      * Create a new space
+     * POST /api/spaces
      */
     @PostMapping
-    public ResponseEntity<?> createSpace(@RequestBody Map<String, String> body) {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            String name = body.get("name");
+    public ResponseEntity<ApiResponse<SpaceResponseDto>> createSpace(
+            @Valid @RequestBody CreateSpaceRequest request) {
 
-            if (name == null || name.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("success", false, "message", "Space name is required"));
-            }
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        SpaceResponseDto space = spaceService.createSpace(currentUserId, request.getName());
 
-            Spaces space = spaceService.createSpace(currentUserId, name);
-
-            return ResponseEntity.status(201).body(Map.of(
-                    "success", true,
-                    "message", "Space created successfully",
-                    "data", Map.of(
-                            "id", space.getId(),
-                            "name", space.getName(),
-                            "ownerId", space.getOwner().getId(),
-                            "createdAt", space.getCreatedAt(),
-                            "remainingSlots", spaceService.getRemainingSpaceSlots(currentUserId))));
-
-        } catch (IllegalStateException ex) {
-            // Space limit reached
-            return ResponseEntity.status(400)
-                    .body(Map.of("success", false, "message", ex.getMessage()));
-        } catch (IllegalArgumentException ex) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("success", false, "message", ex.getMessage()));
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.status(201)
+                .body(ApiResponse.success("Space created successfully", space));
     }
 
     /**
      * Get all spaces for current user
+     * GET /api/spaces
      */
     @GetMapping
-    public ResponseEntity<?> getSpaces() {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var spaces = spaceService.getSpacesWithProductCount(currentUserId);
+    public ResponseEntity<ApiResponse<List<SpaceDto>>> getSpaces() {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        List<SpaceDto> spaces = spaceService.getSpacesWithProductCount(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", spaces));
-
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success(spaces));
     }
 
     /**
      * Get a specific space by ID
+     * GET /api/spaces/{spaceId}
      */
     @GetMapping("/{spaceId}")
-    public ResponseEntity<?> getSpaceById(@PathVariable UUID spaceId) {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var spaceOpt = spaceService.getSpaceByIdAndOwner(spaceId, currentUserId);
+    public ResponseEntity<ApiResponse<SpaceResponseDto>> getSpaceById(@PathVariable UUID spaceId) {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        SpaceResponseDto space = spaceService.getSpaceByIdDto(spaceId, currentUserId);
 
-            if (spaceOpt.isEmpty()) {
-                return ResponseEntity.status(404)
-                        .body(Map.of("success", false, "message", "Space not found"));
-            }
-
-            Spaces space = spaceOpt.get();
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", Map.of(
-                            "id", space.getId(),
-                            "name", space.getName(),
-                            "ownerId", space.getOwner().getId(),
-                            "ownerName", space.getOwner().getName(),
-                            "createdAt", space.getCreatedAt(),
-                            "updatedAt", space.getUpdatedAt())));
-
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success(space));
     }
 
     /**
      * Get space creation status
+     * GET /api/spaces/creation-status
      */
     @GetMapping("/creation-status")
-    public ResponseEntity<?> getCreationStatus() {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            long currentCount = spaceService.getSpacesByOwner(currentUserId).size();
-            int remaining = spaceService.getRemainingSpaceSlots(currentUserId);
-            boolean canCreate = spaceService.canCreateMoreSpaces(currentUserId);
+    public ResponseEntity<ApiResponse<SpaceCreationStatusDto>> getCreationStatus() {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        SpaceCreationStatusDto status = spaceService.getCreationStatus(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", Map.of(
-                            "currentSpaces", currentCount,
-                            "maxSpaces", 10,
-                            "remainingSlots", remaining,
-                            "canCreateMore", canCreate)));
-
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success(status));
     }
 
     /**
      * Update space name
+     * PUT /api/spaces/{spaceId}
      */
     @PutMapping("/{spaceId}")
-    public ResponseEntity<?> updateSpaceById(@PathVariable UUID spaceId, @RequestBody Map<String, String> body) {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            String newName = body.get("name");
+    public ResponseEntity<ApiResponse<SpaceResponseDto>> updateSpaceById(
+            @PathVariable UUID spaceId,
+            @Valid @RequestBody UpdateSpaceRequest request) {
 
-            if (newName == null || newName.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("success", false, "message", "Space name is required"));
-            }
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        SpaceResponseDto updatedSpace = spaceService.updateSpace(spaceId, currentUserId, request.getName());
 
-            Spaces updatedSpace = spaceService.updateSpace(spaceId, currentUserId, newName);
-
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Space updated successfully",
-                    "data", Map.of(
-                            "id", updatedSpace.getId(),
-                            "name", updatedSpace.getName(),
-                            "ownerId", updatedSpace.getOwner().getId(),
-                            "updatedAt", updatedSpace.getUpdatedAt())));
-
-        } catch (IllegalArgumentException ex) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("success", false, "message", ex.getMessage()));
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Space updated successfully", updatedSpace));
     }
 
     /**
      * Delete a space
+     * DELETE /api/spaces/{spaceId}
      */
     @DeleteMapping("/{spaceId}")
-    public ResponseEntity<?> deleteSpace(@PathVariable UUID spaceId) {
-        try {
-            UUID currentUserId = SecurityUtil.getCurrentUserId();
-            spaceService.deleteSpace(spaceId, currentUserId);
+    public ResponseEntity<ApiResponse<Void>> deleteSpace(@PathVariable UUID spaceId) {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        spaceService.deleteSpace(spaceId, currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "message", "Space deleted successfully"));
-
-        } catch (IllegalArgumentException ex) {
-            return ResponseEntity.status(404)
-                    .body(Map.of("success", false, "message", ex.getMessage()));
-        } catch (IllegalStateException ex) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("success", false, "message", ex.getMessage()));
-        } catch (Exception ex) {
-            return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
-        }
+        return ResponseEntity.ok(ApiResponse.success("Space deleted successfully", null));
     }
 }

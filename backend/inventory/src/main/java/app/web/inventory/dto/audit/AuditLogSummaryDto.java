@@ -1,4 +1,4 @@
-package app.web.inventory.dto;
+package app.web.inventory.dto.audit;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
