@@ -16,9 +16,11 @@ import java.util.Optional;
 public class UserController {
 
     private final UserService userService;
+    private final app.web.inventory.service.SpaceService spaceService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, app.web.inventory.service.SpaceService spaceService) {
         this.userService = userService;
+        this.spaceService = spaceService;
     }
 
     /**
@@ -55,5 +57,18 @@ public class UserController {
                 user.getCreatedAt());
 
         return ResponseEntity.ok(ApiResponse.success(userDto));
+    }
+
+    /**
+     * Get pending invites for current user
+     * GET /api/users/me/invites
+     */
+    @GetMapping("/me/invites")
+    public ResponseEntity<ApiResponse<java.util.List<app.web.inventory.dto.space.SpaceInviteDto>>> getMyInvites() {
+        java.util.UUID currentUserId = app.web.inventory.config.SecurityUtil.getCurrentUserId();
+        java.util.List<app.web.inventory.dto.space.SpaceInviteDto> invites = spaceService
+                .getPendingInvites(currentUserId);
+
+        return ResponseEntity.ok(ApiResponse.success(invites));
     }
 }

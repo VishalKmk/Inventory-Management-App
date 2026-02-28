@@ -7,7 +7,6 @@ import lombok.*;
 @Getter
 @Setter
 @NoArgsConstructor
-@AllArgsConstructor
 public class SpaceDto {
     private UUID id;
     private String name;
@@ -16,11 +15,23 @@ public class SpaceDto {
     private long productCount;
 
     // Add this constructor to SpaceDto.java
-    public SpaceDto(UUID id, String name, UUID ownerId, String ownerName) {
+    private String currentUserRole; // New field
+
+    public SpaceDto(UUID id, String name, UUID ownerId, String ownerName, long productCount, String currentUserRole) {
         this.id = id;
         this.name = name;
         this.ownerId = ownerId;
         this.ownerName = ownerName;
-        this.productCount = 0L;
+        this.productCount = productCount;
+        this.currentUserRole = currentUserRole;
+    }
+
+    // Constructor for backward compatibility
+    public SpaceDto(UUID id, String name, UUID ownerId, String ownerName, long productCount) {
+        this(id, name, ownerId, ownerName, productCount, "OWNER");
+    }
+
+    public SpaceDto(UUID id, String name, UUID ownerId, String ownerName) {
+        this(id, name, ownerId, ownerName, 0L, "OWNER");
     }
 }

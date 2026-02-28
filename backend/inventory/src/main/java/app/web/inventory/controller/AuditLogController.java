@@ -38,8 +38,8 @@ public class AuditLogController {
             @RequestParam(required = false) UUID entityId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "${app.pagination.default-page}") int page,
+            @RequestParam(defaultValue = "${app.pagination.default-size}") int size,
             @RequestParam(defaultValue = "timestamp") String sortBy,
             @RequestParam(defaultValue = "DESC") String sortDirection) {
 
@@ -65,8 +65,7 @@ public class AuditLogController {
                     auditLogs.getTotalElements(),
                     auditLogs.getTotalPages(),
                     auditLogs.hasNext(),
-                    auditLogs.hasPrevious()
-            );
+                    auditLogs.hasPrevious());
 
             AuditLogListDto response = new AuditLogListDto(auditLogs.getContent(), pagination);
 
@@ -150,11 +149,10 @@ public class AuditLogController {
     public ResponseEntity<ApiResponse<FilterOptionsDto>> getFilterOptions() {
         try {
             FilterOptionsDto filterOptions = new FilterOptionsDto(
-                    new String[]{"SPACE", "PRODUCT", "USER"},
-                    new String[]{"CREATE", "UPDATE", "DELETE", "STOCK_ADD", "STOCK_REMOVE", "STOCK_UPDATE"},
-                    new String[]{"timestamp", "entityType", "operation"},
-                    new String[]{"ASC", "DESC"}
-            );
+                    new String[] { "SPACE", "PRODUCT", "USER" },
+                    new String[] { "CREATE", "UPDATE", "DELETE", "STOCK_ADD", "STOCK_REMOVE", "STOCK_UPDATE" },
+                    new String[] { "timestamp", "entityType", "operation" },
+                    new String[] { "ASC", "DESC" });
 
             return ResponseEntity.ok(ApiResponse.success(filterOptions));
 

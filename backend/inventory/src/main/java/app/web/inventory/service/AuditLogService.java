@@ -42,8 +42,8 @@ public class AuditLogService {
      * Create an audit log entry
      */
     public void logAction(UUID userId, String entityType, UUID entityId, String operation,
-                          Object changeDetails, String ipAddress, String userAgent,
-                          UUID relatedEntityId, String relatedEntityType) {
+            Object changeDetails, String ipAddress, String userAgent,
+            UUID relatedEntityId, String relatedEntityType) {
         try {
             AuditLog auditLog = new AuditLog();
             auditLog.setUserId(userId);
@@ -90,6 +90,7 @@ public class AuditLogService {
     /**
      * Get audit logs with filters and pagination
      */
+    @SuppressWarnings("null")
     public Page<AuditLogDto> getAuditLogs(UUID userId, AuditLogFilterRequest request) {
         Sort sort = Sort.by(Sort.Direction.fromString(request.getSortDirection()), request.getSortBy());
         Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
@@ -190,12 +191,12 @@ public class AuditLogService {
                 dailyActivity,
                 operationBreakdown,
                 logs.getTotalElements(),
-                days + " days"
-        );
+                days + " days");
     }
 
     /**
-     * Get activity trends for analytics - returns Map (for backward compatibility with DashboardService)
+     * Get activity trends for analytics - returns Map (for backward compatibility
+     * with DashboardService)
      */
     public Map<String, Object> getActivityTrendsAsMap(UUID userId, int days) {
         ActivityTrendsDto dto = getActivityTrends(userId, days);

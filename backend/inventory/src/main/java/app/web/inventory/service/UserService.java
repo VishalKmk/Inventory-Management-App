@@ -4,6 +4,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import app.web.inventory.dto.user.UserDto;
+import app.web.inventory.exception.DuplicateResourceException;
 import app.web.inventory.model.Users;
 import app.web.inventory.repository.UserRepository;
 
@@ -22,7 +23,7 @@ public class UserService {
 
     public Users register(String name, String email, String rawPassword) {
         if (userRepository.findByEmail(email).isPresent()) {
-            throw new RuntimeException("User already exists with email: " + email);
+            throw new DuplicateResourceException("User already exists with email: " + email);
         }
 
         Users user = new Users();
@@ -38,6 +39,7 @@ public class UserService {
         return userRepository.findByEmail(email);
     }
 
+    @SuppressWarnings("null")
     public Optional<Users> findById(UUID id) {
         return userRepository.findById(id);
     }

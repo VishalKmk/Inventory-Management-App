@@ -9,15 +9,27 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import app.web.inventory.model.Products;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 public interface ProductRepository extends JpaRepository<Products, UUID> {
 
     // Find all products in a specific space
     List<Products> findBySpaceId(UUID spaceId);
 
+    // Find all products in a specific space (Paginated)
+    Page<Products> findBySpaceId(UUID spaceId, Pageable pageable);
+
+    // NEW: Search products by name within a specific space (HIERARCHICAL)
     // NEW: Search products by name within a specific space (HIERARCHICAL)
     @Query("SELECT p FROM Products p WHERE p.space.id = :spaceId AND LOWER(p.name) LIKE LOWER(CONCAT('%', :name, '%'))")
     List<Products> findBySpaceIdAndNameContainingIgnoreCase(@Param("spaceId") UUID spaceId, @Param("name") String name);
+
+    // NEW: Search products by name within a specific space (HIERARCHICAL) -
+    // Paginated
+    @Query("SELECT p FROM Products p WHERE p.space.id = :spaceId AND LOWER(p.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    Page<Products> findBySpaceIdAndNameContainingIgnoreCase(@Param("spaceId") UUID spaceId, @Param("name") String name,
+            Pageable pageable);
 
     // Find all products owned by a user (across all their spaces)
     @Query("SELECT p FROM Products p WHERE p.space.owner.id = :ownerId")

@@ -1,6 +1,5 @@
 package app.web.inventory.dto.space;
 
-import app.web.inventory.model.Spaces;
 import lombok.*;
 
 import java.time.Instant;

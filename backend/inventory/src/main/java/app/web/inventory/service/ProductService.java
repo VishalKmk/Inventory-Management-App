@@ -13,10 +13,15 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import app.web.inventory.dto.product.ProductDto;
 import app.web.inventory.dto.product.ProductResponseDto;
+import app.web.inventory.exception.ResourceNotFoundException;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
 import app.web.inventory.repository.ProductRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @Service
 @Transactional
@@ -27,7 +32,7 @@ public class ProductService {
     private final AuditLogService auditLogService;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-                          AuditLogService auditLogService) {
+            AuditLogService auditLogService) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
@@ -40,11 +45,11 @@ public class ProductService {
     /**
      * Create a new product in a specific space (hierarchical)
      */
-    public ProductResponseDto createProduct(UUID ownerId, UUID spaceId, String name, Double price,
-                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+    public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, Double price,
+            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
-        Spaces space = spaceService.getSpaceByIdAndOwner(spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Space not found or access denied"));
+        Spaces space = spaceService.getSpaceByIdAndUser(spaceId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Space not found or access denied"));
 
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Product name is required");
@@ -76,7 +81,7 @@ public class ProductService {
                 "maximumQuantity", maximumQuantity != null ? maximumQuantity : 0,
                 "action", "Product created");
         auditLogService.logAction(
-                ownerId,
+                userId,
                 "PRODUCT",
                 savedProduct.getId(),
                 "CREATE",
@@ -94,12 +99,12 @@ public class ProductService {
      */
     public ProductResponseDto getProductByIdInSpace(UUID productId, UUID spaceId, UUID ownerId) {
         if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
+            throw new ResourceNotFoundException("Space not found or access denied");
         }
 
         Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space"));
 
         return convertToResponseDto(product);
     }
@@ -108,11 +113,11 @@ public class ProductService {
      * Update product details in a specific space (hierarchical)
      */
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-                                                   String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
+            String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
         Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         Map<String, Object> changes = new HashMap<>();
         if (name != null && !name.trim().isEmpty() && !name.trim().equals(product.getName())) {
@@ -136,6 +141,7 @@ public class ProductService {
             product.setMaximumQuantity(maximumQuantity);
         }
 
+        @SuppressWarnings("null")
         Products updatedProduct = productRepository.save(product);
 
         if (!changes.isEmpty()) {
@@ -164,7 +170,7 @@ public class ProductService {
     public ProductResponseDto addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
         Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity to add must be positive");
@@ -202,7 +208,7 @@ public class ProductService {
     public ProductResponseDto removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
         Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity to remove must be positive");
@@ -245,7 +251,7 @@ public class ProductService {
     public void deleteProductInSpace(UUID productId, UUID spaceId, UUID ownerId) {
         Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         String productName = product.getName();
         String spaceName = product.getSpace().getName();
@@ -276,7 +282,7 @@ public class ProductService {
      */
     public List<ProductDto> searchProductsByNameInSpace(UUID ownerId, UUID spaceId, String name) {
         if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
+            throw new ResourceNotFoundException("Space not found or access denied");
         }
 
         List<Products> products;
@@ -296,7 +302,7 @@ public class ProductService {
      */
     public List<ProductDto> getLowStockProductsInSpace(UUID ownerId, UUID spaceId) {
         if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
+            throw new ResourceNotFoundException("Space not found or access denied");
         }
 
         return productRepository.findLowStockProductsBySpaceId(spaceId)
@@ -309,6 +315,30 @@ public class ProductService {
     // GLOBAL METHODS - Return DTOs
     // =============================================================================
 
+    /**
+     * Get products by space with pagination
+     */
+    public Page<ProductDto> getProductsBySpace(UUID ownerId, UUID spaceId, String search, int page, int size,
+            String sortBy, String sortDirection) {
+        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
+            throw new ResourceNotFoundException("Space not found or access denied");
+        }
+
+        String direction = sortDirection != null ? sortDirection : "ASC";
+        String property = sortBy != null ? sortBy : "name";
+        Sort sort = Sort.by(Sort.Direction.fromString(direction), property);
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<Products> productsPage;
+        if (search != null && !search.trim().isEmpty()) {
+            productsPage = productRepository.findBySpaceIdAndNameContainingIgnoreCase(spaceId, search.trim(), pageable);
+        } else {
+            productsPage = productRepository.findBySpaceId(spaceId, pageable);
+        }
+
+        return productsPage.map(this::convertToDto);
+    }
+
     public List<ProductDto> getProductsDtoBySpace(UUID ownerId, UUID spaceId) {
         return getProductsBySpace(ownerId, spaceId)
                 .stream()
@@ -318,7 +348,7 @@ public class ProductService {
 
     public List<Products> getProductsBySpace(UUID ownerId, UUID spaceId) {
         if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
+            throw new ResourceNotFoundException("Space not found or access denied");
         }
         return productRepository.findBySpaceId(spaceId);
     }

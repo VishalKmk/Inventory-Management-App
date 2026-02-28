@@ -1,22 +1,36 @@
 package app.web.inventory.service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.DoubleSummaryStatistics;
+import java.util.HashMap;
+import java.util.IntSummaryStatistics;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-import app.web.inventory.dto.dashboard.*;
-import app.web.inventory.dto.dashboard.InventoryInsightsDto.PriceAnalysisDto;
-import app.web.inventory.dto.dashboard.InventoryInsightsDto.StockAnalysisDto;
-import app.web.inventory.dto.dashboard.LowStockAlertsDto.AlertInfo;
-import app.web.inventory.dto.dashboard.RecentActivityDto.ActivityItem;
-import app.web.inventory.dto.dashboard.SpaceMetricsDto.SpaceMetric;
-import app.web.inventory.dto.dashboard.SpaceMetricsDto.SummaryDto;
-import app.web.inventory.dto.dashboard.TopProductsDto.ProductSummary;
-import app.web.inventory.dto.dashboard.InventoryTrendsDto.CurrentSnapshot;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.dashboard.DashboardOverviewDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto.PriceAnalysisDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto.StockAnalysisDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto.CurrentSnapshot;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto.AlertInfo;
+import app.web.inventory.dto.dashboard.RecentActivityDto;
+import app.web.inventory.dto.dashboard.RecentActivityDto.ActivityItem;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto.SpaceMetric;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto.SummaryDto;
+import app.web.inventory.dto.dashboard.TopProductsDto;
+import app.web.inventory.dto.dashboard.TopProductsDto.ProductSummary;
 import app.web.inventory.dto.space.SpaceDto;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
@@ -29,7 +43,7 @@ public class DashboardService {
     private final AuditLogService auditLogService;
 
     public DashboardService(ProductService productService, SpaceService spaceService,
-                            AuditLogService auditLogService) {
+            AuditLogService auditLogService) {
         this.productService = productService;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
@@ -65,8 +79,7 @@ public class DashboardService {
                 Math.round(totalValue * 100.0) / 100.0,
                 lowStockProducts.size(),
                 stockStatus,
-                usedSpaces > 0 ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0 : 0.0
-        );
+                usedSpaces > 0 ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0 : 0.0);
     }
 
     /**
@@ -87,8 +100,7 @@ public class DashboardService {
         PriceAnalysisDto priceAnalysis = new PriceAnalysisDto(
                 Math.round(priceStats.getMin() * 100.0) / 100.0,
                 Math.round(priceStats.getMax() * 100.0) / 100.0,
-                Math.round(priceStats.getAverage() * 100.0) / 100.0
-        );
+                Math.round(priceStats.getAverage() * 100.0) / 100.0);
 
         // Stock analysis
         IntSummaryStatistics stockStats = products.stream()
@@ -99,8 +111,7 @@ public class DashboardService {
                 stockStats.getMin(),
                 stockStats.getMax(),
                 Math.round(stockStats.getAverage() * 100.0) / 100.0,
-                stockStats.getSum()
-        );
+                stockStats.getSum());
 
         // Value distribution by space
         Map<String, Double> valueBySpace = products.stream()
@@ -110,8 +121,7 @@ public class DashboardService {
                 .entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        e -> Math.round(e.getValue() * 100.0) / 100.0
-                ));
+                        e -> Math.round(e.getValue() * 100.0) / 100.0));
 
         // Product count by space
         Map<String, Long> countBySpace = products.stream()
@@ -144,8 +154,7 @@ public class DashboardService {
                 lowStockProducts.size(),
                 alertsBySpace,
                 severityLevels,
-                !lowStockProducts.isEmpty()
-        );
+                !lowStockProducts.isEmpty());
     }
 
     /**
@@ -156,9 +165,9 @@ public class DashboardService {
         List<AuditLogDto> recentLogs = auditLogService.getRecentActivity(userId, 168); // Last 7 days
 
         List<ActivityItem> activities = recentLogs.stream()
-                .map(log -> {
+                .map((AuditLogDto log) -> {
                     Map<String, Object> details = new HashMap<>();
-                    String description = "";
+                    String description;
 
                     // Parse details for display
                     if (log.getDetails() != null) {
@@ -166,7 +175,7 @@ public class DashboardService {
                             ObjectMapper mapper = new ObjectMapper();
                             details = mapper.readValue(log.getDetails(), Map.class);
                             description = generateActivityDescription(log.getOperation(), log.getEntityType(), details);
-                        } catch (Exception e) {
+                        } catch (JsonProcessingException e) {
                             description = log.getOperation() + " " + log.getEntityType();
                         }
                     } else {
@@ -181,8 +190,7 @@ public class DashboardService {
                             log.getTimestamp(),
                             log.getIpAddress(),
                             details,
-                            description
-                    );
+                            description);
                 })
                 .collect(Collectors.toList());
 
@@ -190,8 +198,7 @@ public class DashboardService {
                 activities,
                 activities.size(),
                 !activities.isEmpty(),
-                "Recent activities from audit logs"
-        );
+                "Recent activities from audit logs");
     }
 
     /**
@@ -223,8 +230,7 @@ public class DashboardService {
                             space.getProductCount(),
                             Math.round(totalValue * 100.0) / 100.0,
                             lowStockCount,
-                            calculateSpaceHealthScore(spaceProducts)
-                    );
+                            calculateSpaceHealthScore(spaceProducts));
                 })
                 .sorted((a, b) -> Double.compare(b.getTotalValue(), a.getTotalValue()))
                 .collect(Collectors.toList());
@@ -242,8 +248,7 @@ public class DashboardService {
                 spacesWithCounts.size(),
                 Math.round(totalValue * 100.0) / 100.0,
                 totalProducts,
-                spacesWithCounts.size() > 0 ? Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0 : 0.0
-        );
+                !spacesWithCounts.isEmpty() ? Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0 : 0.0);
 
         return new SpaceMetricsDto(true, spaceMetrics, summary);
     }
@@ -313,9 +318,9 @@ public class DashboardService {
                     new Date(),
                     products.size(),
                     spaces.size(),
-                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0) / 100.0,
-                    productService.getLowStockProducts(userId).size()
-            );
+                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0)
+                            / 100.0,
+                    productService.getLowStockProducts(userId).size());
 
             return new InventoryTrendsDto(
                     true,
@@ -325,17 +330,16 @@ public class DashboardService {
                     totalActivities,
                     period,
                     null,
-                    days
-            );
+                    days);
         } else {
             // No historical data available
             CurrentSnapshot snapshot = new CurrentSnapshot(
                     new Date(),
                     products.size(),
                     spaces.size(),
-                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0) / 100.0,
-                    productService.getLowStockProducts(userId).size()
-            );
+                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0)
+                            / 100.0,
+                    productService.getLowStockProducts(userId).size());
 
             return new InventoryTrendsDto(
                     false,
@@ -345,8 +349,7 @@ public class DashboardService {
                     null,
                     null,
                     "Historical trend data requires audit logging system. Showing current state.",
-                    days
-            );
+                    days);
         }
     }
 
@@ -379,8 +382,7 @@ public class DashboardService {
                 product.getCurrentStock(),
                 product.getMinimumQuantity(),
                 getStockSeverity(product),
-                product.getMinimumQuantity() != null ? product.getMinimumQuantity() - product.getCurrentStock() : 0
-        );
+                product.getMinimumQuantity() != null ? product.getMinimumQuantity() - product.getCurrentStock() : 0);
     }
 
     private String getStockSeverity(Products product) {
@@ -426,33 +428,29 @@ public class DashboardService {
                 product.getPrice(),
                 product.getCurrentStock(),
                 Math.round(product.getPrice() * product.getCurrentStock() * 100.0) / 100.0,
-                productService.isLowStock(product)
-        );
+                productService.isLowStock(product));
     }
 
     private String generateActivityDescription(String operation, String entityType, Map<String, Object> details) {
-        switch (operation + "_" + entityType) {
-            case "CREATE_SPACE":
-                return "Created space: " + details.get("spaceName");
-            case "UPDATE_SPACE":
-                return "Renamed space from '" + details.get("oldName") + "' to '" + details.get("newName") + "'";
-            case "DELETE_SPACE":
-                return "Deleted space: " + details.get("spaceName");
-            case "CREATE_PRODUCT":
-                return "Created product '" + details.get("productName") + "' in space '" + details.get("spaceName") + "'";
-            case "UPDATE_PRODUCT":
-                return "Updated product: " + details.get("productName");
-            case "DELETE_PRODUCT":
-                return "Deleted product '" + details.get("productName") + "' from space '" + details.get("spaceName") + "'";
-            case "STOCK_ADD":
-                return "Added " + details.get("quantityAdded") + " units to '" + details.get("productName") + "'";
-            case "STOCK_REMOVE":
-                return "Removed " + details.get("quantityRemoved") + " units from '" + details.get("productName") + "'";
-            case "STOCK_UPDATE":
-                return "Updated stock for '" + details.get("productName") + "' from " +
-                        details.get("oldStock") + " to " + details.get("newStock");
-            default:
-                return operation + " " + entityType;
-        }
+        return switch (operation + "_" + entityType) {
+            case "CREATE_SPACE" -> "Created space: " + details.get("spaceName");
+            case "UPDATE_SPACE" ->
+                "Renamed space from '" + details.get("oldName") + "' to '" + details.get("newName") + "'";
+            case "DELETE_SPACE" -> "Deleted space: " + details.get("spaceName");
+            case "CREATE_PRODUCT" ->
+                "Created product '" + details.get("productName") + "' in space '" + details.get("spaceName")
+                        + "'";
+            case "UPDATE_PRODUCT" -> "Updated product: " + details.get("productName");
+            case "DELETE_PRODUCT" ->
+                "Deleted product '" + details.get("productName") + "' from space '" + details.get("spaceName")
+                        + "'";
+            case "STOCK_ADD" ->
+                "Added " + details.get("quantityAdded") + " units to '" + details.get("productName") + "'";
+            case "STOCK_REMOVE" ->
+                "Removed " + details.get("quantityRemoved") + " units from '" + details.get("productName") + "'";
+            case "STOCK_UPDATE" -> "Updated stock for '" + details.get("productName") + "' from " +
+                    details.get("oldStock") + " to " + details.get("newStock");
+            default -> operation + " " + entityType;
+        };
     }
 }

@@ -2,12 +2,21 @@ package app.web.inventory.controller;
 
 import java.util.UUID;
 
-import app.web.inventory.dto.api.ApiResponse;
-import app.web.inventory.dto.dashboard.*;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import app.web.inventory.config.SecurityUtil;
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.dashboard.DashboardOverviewDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto;
+import app.web.inventory.dto.dashboard.RecentActivityDto;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.TopProductsDto;
 import app.web.inventory.service.DashboardService;
 import lombok.extern.slf4j.Slf4j;
 
