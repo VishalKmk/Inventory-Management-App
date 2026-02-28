@@ -1,27 +1,28 @@
 package app.web.inventory.service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import app.web.inventory.dto.product.ProductDto;
 import app.web.inventory.dto.product.ProductResponseDto;
 import app.web.inventory.exception.ResourceNotFoundException;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
+import app.web.inventory.model.enums.SpaceRole;
 import app.web.inventory.repository.ProductRepository;
-import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import app.web.inventory.repository.SpaceMemberRepository;
+import app.web.inventory.util.RequestUtil;
 
 @Service
 @Transactional
@@ -30,12 +31,14 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final SpaceService spaceService;
     private final AuditLogService auditLogService;
+    private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-            AuditLogService auditLogService) {
+            AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
+        this.spaceMemberRepository = spaceMemberRepository;
     }
 
     // =============================================================================
@@ -48,8 +51,9 @@ public class ProductService {
     public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, Double price,
             Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
-        Spaces space = spaceService.getSpaceByIdAndUser(spaceId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Space not found or access denied"));
+        checkWriteAccess(spaceId, userId);
+
+        Spaces space = spaceService.getSpaceById(spaceId);
 
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Product name is required");
@@ -86,23 +90,50 @@ public class ProductService {
                 savedProduct.getId(),
                 "CREATE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
         return convertToResponseDto(savedProduct);
     }
 
+    // Get all accessible products for a user (owned + member spaces)
+    public List<Products> getAccessibleProducts(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        // Get from owned spaces
+        List<Products> ownedProducts = productRepository.findByOwnerId(userId);
+
+        // Get from member spaces
+        List<Products> memberProducts = spaceMemberRepository
+                .findActiveSpacesByUserId(userId)
+                .stream()
+                .filter(sm -> !sm.getSpace().getOwner().getId().equals(userId))
+                .flatMap(sm -> productRepository.findBySpaceId(sm.getSpace().getId()).stream())
+                .collect(Collectors.toList());
+
+        List<Products> all = new ArrayList<>(ownedProducts);
+        all.addAll(memberProducts);
+        return all;
+    }
+
+    // Also fix getLowStockProducts
+    public List<Products> getAccessibleLowStockProducts(UUID userId) {
+        return getAccessibleProducts(userId).stream()
+                .filter(this::isLowStock)
+                .collect(Collectors.toList());
+    }
+
     /**
      * Get a specific product by ID within a specific space (hierarchical)
      */
     public ProductResponseDto getProductByIdInSpace(UUID productId, UUID spaceId, UUID ownerId) {
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new ResourceNotFoundException("Space not found or access denied");
-        }
+        checkReadAccess(spaceId, ownerId);
 
-        Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId) // ← was userId
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space"));
 
@@ -115,7 +146,9 @@ public class ProductService {
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
             String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
-        Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
+        checkWriteAccess(spaceId, ownerId);
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
@@ -155,8 +188,8 @@ public class ProductService {
                     productId,
                     "UPDATE",
                     changes,
-                    getClientIpAddress(),
-                    getUserAgent(),
+                    RequestUtil.getClientIpAddress(),
+                    RequestUtil.getUserAgent(),
                     spaceId,
                     "SPACE");
         }
@@ -168,7 +201,9 @@ public class ProductService {
      * Add stock to a product in a specific space
      */
     public ProductResponseDto addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
-        Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
+        checkWriteAccess(spaceId, ownerId);
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
@@ -194,8 +229,8 @@ public class ProductService {
                 productId,
                 "STOCK_ADD",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
@@ -206,7 +241,9 @@ public class ProductService {
      * Remove stock from a product in a specific space
      */
     public ProductResponseDto removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
-        Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
+        checkWriteAccess(spaceId, ownerId);
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
@@ -237,8 +274,8 @@ public class ProductService {
                 productId,
                 "STOCK_REMOVE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
@@ -249,7 +286,12 @@ public class ProductService {
      * Delete a product from a specific space (hierarchical)
      */
     public void deleteProductInSpace(UUID productId, UUID spaceId, UUID ownerId) {
-        Products product = productRepository.findByIdAndOwnerId(productId, ownerId)
+        SpaceRole role = spaceService.getUserRoleInSpace(spaceId, ownerId); // ← was userId
+        if (role == SpaceRole.MEMBER || role == SpaceRole.VIEWER || role == SpaceRole.PENDING) {
+            throw new SecurityException("Only owners and admins can delete products");
+        }
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId) // ← was userId
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
@@ -271,8 +313,8 @@ public class ProductService {
                 productId,
                 "DELETE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
     }
@@ -281,9 +323,7 @@ public class ProductService {
      * Search products by name within a specific space (hierarchical)
      */
     public List<ProductDto> searchProductsByNameInSpace(UUID ownerId, UUID spaceId, String name) {
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new ResourceNotFoundException("Space not found or access denied");
-        }
+        checkReadAccess(spaceId, ownerId);
 
         List<Products> products;
         if (name == null || name.trim().isEmpty()) {
@@ -301,9 +341,7 @@ public class ProductService {
      * Get products with low stock in a specific space (hierarchical)
      */
     public List<ProductDto> getLowStockProductsInSpace(UUID ownerId, UUID spaceId) {
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new ResourceNotFoundException("Space not found or access denied");
-        }
+        checkReadAccess(spaceId, ownerId);
 
         return productRepository.findLowStockProductsBySpaceId(spaceId)
                 .stream()
@@ -318,32 +356,25 @@ public class ProductService {
     /**
      * Get products by space with pagination
      */
-    public Page<ProductDto> getProductsBySpace(UUID ownerId, UUID spaceId, String search, int page, int size,
-            String sortBy, String sortDirection) {
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
+    public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
+            int page, int size, String sortBy, String sortDirection) {
+
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new ResourceNotFoundException("Space not found or access denied");
         }
 
-        String direction = sortDirection != null ? sortDirection : "ASC";
-        String property = sortBy != null ? sortBy : "name";
-        Sort sort = Sort.by(Sort.Direction.fromString(direction), property);
-        Pageable pageable = PageRequest.of(page, size, sort);
+        // Fix: provide safe defaults before passing to Sort.by()
+        String safeSort = (sortBy != null && !sortBy.isBlank()) ? sortBy : "name";
+        String safeDirection = (sortDirection != null && !sortDirection.isBlank()) ? sortDirection : "ASC";
 
-        Page<Products> productsPage;
-        if (search != null && !search.trim().isEmpty()) {
-            productsPage = productRepository.findBySpaceIdAndNameContainingIgnoreCase(spaceId, search.trim(), pageable);
-        } else {
-            productsPage = productRepository.findBySpaceId(spaceId, pageable);
-        }
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.fromString(safeDirection), safeSort));
 
-        return productsPage.map(this::convertToDto);
-    }
+        String searchParam = (search != null && !search.isBlank()) ? search.trim() : null;
 
-    public List<ProductDto> getProductsDtoBySpace(UUID ownerId, UUID spaceId) {
-        return getProductsBySpace(ownerId, spaceId)
-                .stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
+        return productRepository
+                .findBySpaceIdAndUserHasAccessAndSearch(spaceId, userId, searchParam, pageable)
+                .map(this::convertToDto);
     }
 
     public List<Products> getProductsBySpace(UUID ownerId, UUID spaceId) {
@@ -364,6 +395,20 @@ public class ProductService {
     // =============================================================================
     // UTILITY METHODS
     // =============================================================================
+
+    private void checkWriteAccess(UUID spaceId, UUID userId) {
+        SpaceRole role = spaceService.getUserRoleInSpace(spaceId, userId);
+        // VIEWER can't write, PENDING can't do anything
+        if (role == SpaceRole.VIEWER || role == SpaceRole.PENDING) {
+            throw new SecurityException("Insufficient permissions to modify products");
+        }
+    }
+
+    private void checkReadAccess(UUID spaceId, UUID userId) {
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
+            throw new ResourceNotFoundException("Space not found or access denied");
+        }
+    }
 
     public boolean isLowStock(Products product) {
         return product.getMinimumQuantity() != null &&
@@ -401,38 +446,5 @@ public class ProductService {
                 isLowStock(product),
                 product.getCreatedAt(),
                 product.getUpdatedAt());
-    }
-
-    // Helper methods for request context
-    private String getClientIpAddress() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                String xForwardedFor = request.getHeader("X-Forwarded-For");
-                if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-                    return xForwardedFor.split(",")[0].trim();
-                }
-                return request.getRemoteAddr();
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
-    }
-
-    private String getUserAgent() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                return request.getHeader("User-Agent");
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
     }
 }

@@ -15,6 +15,9 @@ import app.web.inventory.model.enums.SpaceRole;
 
 public interface SpaceMemberRepository extends JpaRepository<SpaceMember, UUID> {
 
+    // Delete all products in a specific space
+    void deleteBySpaceId(UUID spaceId);
+
     // Check if user is a member of a space
     boolean existsBySpaceIdAndUserId(UUID spaceId, UUID userId);
 

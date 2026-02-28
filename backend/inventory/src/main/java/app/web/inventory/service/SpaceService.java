@@ -1,47 +1,57 @@
 package app.web.inventory.service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-
-import app.web.inventory.dto.space.SpaceCreationStatusDto;
-import app.web.inventory.dto.space.SpaceDto;
-import app.web.inventory.dto.space.SpaceResponseDto;
-import app.web.inventory.dto.space.InviteMemberRequest;
-import app.web.inventory.dto.space.SpaceMemberDto;
-import app.web.inventory.dto.space.SpaceInviteDto;
-import app.web.inventory.exception.DuplicateResourceException;
-import app.web.inventory.exception.ResourceNotFoundException;
-import app.web.inventory.model.Spaces;
-import app.web.inventory.model.Users;
-import app.web.inventory.model.SpaceMember;
-import app.web.inventory.model.enums.SpaceRole;
-import app.web.inventory.repository.SpaceRepository;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import app.web.inventory.dto.space.InviteMemberRequest;
+import app.web.inventory.dto.space.SpaceCreationStatusDto;
+import app.web.inventory.dto.space.SpaceDto;
+import app.web.inventory.dto.space.SpaceInviteDto;
+import app.web.inventory.dto.space.SpaceMemberDto;
+import app.web.inventory.dto.space.SpaceResponseDto;
+import app.web.inventory.exception.DuplicateResourceException;
+import app.web.inventory.exception.ResourceNotFoundException;
+import app.web.inventory.model.SpaceMember;
+import app.web.inventory.model.Spaces;
+import app.web.inventory.model.Users;
+import app.web.inventory.model.enums.SpaceRole;
+import app.web.inventory.repository.SpaceRepository;
+import app.web.inventory.util.RequestUtil;
+import app.web.inventory.repository.ProductRepository;
+import app.web.inventory.repository.SpaceMemberRepository;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @Transactional
+@Slf4j
 public class SpaceService {
 
     private final SpaceRepository spaceRepository;
     private final UserService userService;
     private final AuditLogService auditLogService;
-    private final app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository; // New dependency
+    private final SpaceMemberRepository spaceMemberRepository;
+    private final ProductRepository productRepository;
+    private final EmailService emailService;
 
     public SpaceService(SpaceRepository spaceRepository, UserService userService, AuditLogService auditLogService,
-            app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository) {
+            app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository,
+            ProductRepository productRepository, EmailService emailService) {
         this.spaceRepository = spaceRepository;
         this.userService = userService;
         this.auditLogService = auditLogService;
         this.spaceMemberRepository = spaceMemberRepository;
+        this.productRepository = productRepository;
+        this.emailService = emailService;
     }
 
     /**
@@ -68,7 +78,7 @@ public class SpaceService {
         Spaces savedSpace = spaceRepository.save(space);
 
         // Add creator as OWNER member
-        addMemberToSpace(savedSpace, owner, app.web.inventory.model.enums.SpaceRole.OWNER);
+        addOwnerToSpace(savedSpace, owner);
 
         Map<String, Object> details = Map.of(
                 "spaceName", savedSpace.getName(),
@@ -79,37 +89,36 @@ public class SpaceService {
                 savedSpace.getId(),
                 "CREATE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 null,
                 null);
 
         return convertToResponseDto(savedSpace);
     }
 
-    private void addMemberToSpace(Spaces space, Users user, SpaceRole assignedRole, SpaceRole initialStatus,
-            UUID invitedBy) {
-        app.web.inventory.model.SpaceMember member = new app.web.inventory.model.SpaceMember();
-        member.setSpace(space);
-        member.setUser(user);
-        // If initialStatus is PENDING, we save PENDING as the role column for now,
-        // OR we need a separate Status column. The User requested SpaceRole.PENDING.
-        // So we set Role = PENDING.
-        // But we need to store the "Intended Role" somewhere if we want them to become
-        // ADMIN upon accept.
-        // For simplicity, we will just set them as PENDING. When they accept, we might
-        // default to MEMBER,
-        // unless we store intended role.
-        // Let's stick to PENDING as the role for now.
-        member.setRole(initialStatus != null ? initialStatus : assignedRole);
-        member.setInvitedBy(invitedBy);
-        // Note: needed a field to store intended role if it's different from PENDING.
-        // For now, let's assume all invites start as MEMBER on acceptance.
+    @SuppressWarnings("null")
+    private void addMemberToSpace(Spaces space, Users user, SpaceRole intendedRole, UUID invitedBy) {
+        SpaceMember member = SpaceMember.builder()
+                .space(space)
+                .user(user)
+                .role(SpaceRole.PENDING)
+                .intendedRole(intendedRole)
+                .invitedBy(invitedBy)
+                .build();
         spaceMemberRepository.save(member);
     }
 
-    private void addMemberToSpace(Spaces space, Users user, SpaceRole role) {
-        addMemberToSpace(space, user, role, role, null);
+    @SuppressWarnings("null")
+    private void addOwnerToSpace(Spaces space, Users owner) {
+        SpaceMember member = SpaceMember.builder()
+                .space(space)
+                .user(owner)
+                .role(SpaceRole.OWNER)
+                .intendedRole(SpaceRole.OWNER)
+                .invitedBy(null)
+                .build();
+        spaceMemberRepository.save(member);
     }
 
     /**
@@ -153,8 +162,8 @@ public class SpaceService {
                 spaceId,
                 "UPDATE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 null,
                 null);
 
@@ -165,32 +174,63 @@ public class SpaceService {
     /**
      * Delete a space (only if it has no products)
      */
+    // SpaceService.deleteSpace()
     public void deleteSpace(UUID spaceId, UUID userId) {
+        if (spaceId == null || userId == null) {
+            throw new IllegalArgumentException("Space ID and User ID cannot be null");
+        }
+
         Spaces space = getSpaceByIdAndUser(spaceId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Space not found or access denied"));
 
-        long productCount = spaceRepository.countProductsInSpace(spaceId);
-        if (productCount > 0) {
-            throw new IllegalStateException(
-                    "Cannot delete space with " + productCount + " products. Remove products first.");
+        if (!space.getOwner().getId().equals(userId)) {
+            throw new SecurityException("Only the owner can delete a space");
         }
 
         String spaceName = space.getName();
+        String ownerName = space.getOwner().getName();
+
+        // Fetch members BEFORE deleting to notify them
+        List<SpaceMember> members = spaceMemberRepository
+                .findBySpaceId(spaceId, Pageable.unpaged())
+                .stream()
+                .filter(m -> m.getRole() != SpaceRole.OWNER)
+                .collect(Collectors.toList());
+
+        long productCount = spaceRepository.countProductsInSpace(spaceId);
+
+        // Delete products first
+        productRepository.deleteBySpaceId(spaceId);
+
+        // Delete members
+        spaceMemberRepository.deleteBySpaceId(spaceId);
+
+        // Delete space
         spaceRepository.delete(space);
 
+        // Notify members after deletion
+        for (SpaceMember member : members) {
+            try {
+                emailService.sendSpaceDeletionNoticeToMember(
+                        member.getUser().getEmail(),
+                        spaceName,
+                        ownerName);
+            } catch (Exception e) {
+                log.warn("Failed to send deletion notice to member {}",
+                        member.getUser().getEmail(), e);
+            }
+        }
+
+        // Audit log
         Map<String, Object> details = Map.of(
                 "spaceName", spaceName,
+                "productsDeleted", productCount,
+                "membersRemoved", members.size(),
                 "action", "Space deleted");
+
         auditLogService.logAction(
-                userId,
-                "SPACE",
-                spaceId,
-                "DELETE",
-                details,
-                getClientIpAddress(),
-                getUserAgent(),
-                null,
-                null);
+                userId, "SPACE", spaceId, "DELETE", details,
+                RequestUtil.getClientIpAddress(), RequestUtil.getUserAgent(), null, null);
     }
 
     /**
@@ -238,10 +278,9 @@ public class SpaceService {
             throw new DuplicateResourceException("User is already a member of this space");
         }
 
-        // 4. Add member
         // 4. Add member as PENDING
-        addMemberToSpace(space, userToInvite, request.getRole() != null ? request.getRole() : SpaceRole.MEMBER,
-                SpaceRole.PENDING, initiatorId);
+        SpaceRole intendedRole = request.getRole() != null ? request.getRole() : SpaceRole.MEMBER;
+        addMemberToSpace(space, userToInvite, intendedRole, initiatorId);
 
         // 5. Audit log
         Map<String, Object> details = Map.of(
@@ -256,8 +295,8 @@ public class SpaceService {
                 spaceId,
                 "INVITE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 userToInvite.getId(),
                 "USER");
     }
@@ -266,41 +305,44 @@ public class SpaceService {
      * Remove a member from a space
      */
     public void removeMember(UUID spaceId, UUID initiatorId, UUID memberId) {
-        // 1. Check permissions (Owner)
-        Spaces space = getSpaceByIdAndUser(spaceId, initiatorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Space not found or access denied"));
 
-        boolean isOwner = space.getOwner().getId().equals(initiatorId);
+        // Null check
+        if (spaceId == null || initiatorId == null || memberId == null) {
+            throw new IllegalArgumentException("Space ID, initiator ID and member ID cannot be null");
+        }
+        // Self-removal check first
+        if (initiatorId.equals(memberId)) {
+            throw new IllegalArgumentException("Cannot remove yourself. Use the leave space feature instead.");
+        }
 
-        // Members typically can only be removed by Owner or Admin.
-        // For simplicity, let's say currently ONLY OWNER can remove people OR Admins
-        // can remove normal members.
-
-        boolean isAdmin = spaceMemberRepository.existsBySpaceIdAndUserIdAndRole(spaceId, initiatorId, SpaceRole.ADMIN);
-
-        if (!isOwner && !isAdmin) {
+        // Single permission check based on role (Owner or Admin can remove, but Admins
+        // cannot remove other Admins)
+        SpaceRole initiatorRole = getUserRoleInSpace(spaceId, initiatorId);
+        if (initiatorRole != SpaceRole.OWNER && initiatorRole != SpaceRole.ADMIN) {
             throw new SecurityException("Insufficient permissions to remove members");
         }
+
+        Spaces space = spaceRepository.findById(spaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Space not found"));
 
         SpaceMember memberToRemove = spaceMemberRepository.findBySpaceIdAndUserId(spaceId, memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found in this space"));
 
-        // Protect Owner from being removed
         if (memberToRemove.getRole() == SpaceRole.OWNER) {
             throw new IllegalArgumentException("Cannot remove the Owner of the space");
         }
 
-        // Admins cannot remove other Admins (optional rule)
-        if (isAdmin && memberToRemove.getRole() == SpaceRole.ADMIN) {
+        // Admins cannot remove other Admins - only Owner can
+        if (initiatorRole == SpaceRole.ADMIN && memberToRemove.getRole() == SpaceRole.ADMIN) {
             throw new SecurityException("Admins cannot remove other Admins");
         }
 
         spaceMemberRepository.delete(memberToRemove);
 
-        // Audit log
         Map<String, Object> details = Map.of(
                 "spaceName", space.getName(),
                 "removedUser", memberToRemove.getUser().getEmail(),
+                "removedUserRole", memberToRemove.getRole().name(),
                 "action", "Member removed");
 
         auditLogService.logAction(
@@ -309,8 +351,8 @@ public class SpaceService {
                 spaceId,
                 "REMOVE_MEMBER",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 memberId,
                 "USER");
     }
@@ -342,7 +384,9 @@ public class SpaceService {
                         member.getSpace().getId(),
                         member.getSpace().getName(),
                         member.getSpace().getOwner().getName(),
-                        SpaceRole.MEMBER,
+                        member.getIntendedRole() != null
+                                ? member.getIntendedRole()
+                                : SpaceRole.MEMBER, // fallback if somehow null
                         member.getJoinedAt(),
                         member.getInvitedBy()))
                 .collect(Collectors.toList());
@@ -359,7 +403,12 @@ public class SpaceService {
             throw new IllegalStateException("User is already a member or not pending");
         }
 
-        member.setRole(SpaceRole.MEMBER); // Default to MEMBER on accept
+        SpaceRole roleToAssign = member.getIntendedRole() != null
+                ? member.getIntendedRole()
+                : SpaceRole.MEMBER;
+
+        member.setRole(roleToAssign);
+        member.setIntendedRole(null);
         spaceMemberRepository.save(member);
     }
 
@@ -390,27 +439,55 @@ public class SpaceService {
     }
 
     /**
-     * Get spaces with product counts
+     * Get only spaces owned by user
      */
-    public List<SpaceDto> getSpacesWithProductCount(UUID ownerId) {
-        List<Object[]> results = spaceRepository.findSpacesWithProductCount(ownerId);
+    public List<SpaceDto> getOwnedSpacesWithProductCount(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        List<Object[]> results = spaceRepository.findSpacesWithProductCount(userId);
 
         return results.stream()
                 .map(result -> {
                     Spaces space = (Spaces) result[0];
-                    long productCount = 0;
-                    if (result[1] instanceof Number) {
-                        productCount = ((Number) result[1]).longValue();
-                    }
+                    long productCount = result[1] instanceof Number
+                            ? ((Number) result[1]).longValue()
+                            : 0L;
 
                     return new SpaceDto(
                             space.getId(),
                             space.getName(),
                             space.getOwner().getId(),
                             space.getOwner().getName(),
-                            productCount);
+                            productCount,
+                            "OWNER");
                 })
-                .filter(dto -> dto != null)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get only spaces shared with user (member/admin of, not owned)
+     */
+    public List<SpaceDto> getSharedSpacesWithProductCount(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        return spaceMemberRepository.findActiveSpacesByUserId(userId)
+                .stream()
+                .filter(sm -> !sm.getSpace().getOwner().getId().equals(userId)) // exclude owned
+                .map(sm -> {
+                    long productCount = spaceRepository.countProductsInSpace(sm.getSpace().getId());
+
+                    return new SpaceDto(
+                            sm.getSpace().getId(),
+                            sm.getSpace().getName(),
+                            sm.getSpace().getOwner().getId(),
+                            sm.getSpace().getOwner().getName(),
+                            productCount,
+                            sm.getRole().name());
+                })
                 .collect(Collectors.toList());
     }
 
@@ -418,13 +495,56 @@ public class SpaceService {
     // Internal/Utility Methods
     // =============================================================================
 
+    // Get all spaces where user is owner or member (for listing)
+    public List<Spaces> getAccessibleSpaces(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        // Get owned spaces
+        List<Spaces> ownedSpaces = spaceRepository.findByOwnerId(userId);
+
+        // Get member spaces (excluding PENDING)
+        List<Spaces> memberSpaces = spaceMemberRepository
+                .findActiveSpacesByUserId(userId)
+                .stream()
+                .map(SpaceMember::getSpace)
+                .filter(s -> !s.getOwner().getId().equals(userId)) // avoid duplicates
+                .collect(Collectors.toList());
+
+        List<Spaces> allSpaces = new ArrayList<>(ownedSpaces);
+        allSpaces.addAll(memberSpaces);
+        return allSpaces;
+    }
+
+    /*
+     * Get space by ID without user check (used internally when we already have
+     * space object)
+     */
+    public Spaces getSpaceById(UUID spaceId) {
+        if (spaceId == null) {
+            throw new IllegalArgumentException("Space ID cannot be null");
+        }
+        return spaceRepository.findById(spaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Space not found"));
+    }
+
     public List<Spaces> getSpacesByOwner(UUID ownerId) {
+        if (ownerId == null)
+            throw new IllegalArgumentException("Owner ID cannot be null");
         return spaceRepository.findByOwnerId(ownerId);
     }
 
-    public java.util.Optional<Spaces> getSpaceByIdAndUser(UUID spaceId, UUID userId) {
+    public Optional<Spaces> getSpaceByIdAndUser(UUID spaceId, UUID userId) {
+
+        if (spaceId == null) {
+            throw new IllegalArgumentException("Space ID cannot be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
         // Try owner first
-        java.util.Optional<Spaces> space = spaceRepository.findByIdAndOwnerId(spaceId, userId);
+        Optional<Spaces> space = spaceRepository.findByIdAndOwnerId(spaceId, userId);
         if (space.isPresent()) {
             return space;
         }
@@ -434,13 +554,33 @@ public class SpaceService {
                 .map(app.web.inventory.model.SpaceMember::getSpace);
     }
 
+    // Check if user has access to space (owner or member)
     public boolean hasAccessToSpace(UUID spaceId, UUID userId) {
-        // Check if owner
         if (spaceRepository.findByIdAndOwnerId(spaceId, userId).isPresent()) {
             return true;
         }
-        // Check if member
-        return spaceMemberRepository.existsBySpaceIdAndUserId(spaceId, userId);
+        // Only active members (not PENDING) have access
+        return spaceMemberRepository.findBySpaceIdAndUserId(spaceId, userId)
+                .map(member -> member.getRole() != SpaceRole.PENDING)
+                .orElse(false);
+    }
+
+    // Get the user's role in a space (useful for write permission checks)
+    public SpaceRole getUserRoleInSpace(UUID spaceId, UUID userId) {
+        if (spaceId == null || userId == null) {
+            throw new IllegalArgumentException("Space ID and User ID cannot be null");
+        }
+
+        Spaces space = spaceRepository.findById(spaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Space not found"));
+
+        if (space.getOwner().getId().equals(userId)) {
+            return SpaceRole.OWNER;
+        }
+
+        return spaceMemberRepository.findBySpaceIdAndUserId(spaceId, userId)
+                .map(SpaceMember::getRole)
+                .orElseThrow(() -> new SecurityException("Access denied"));
     }
 
     public int getRemainingSpaceSlots(UUID ownerId) {
@@ -456,46 +596,15 @@ public class SpaceService {
      * Convert Space entity to Response DTO
      */
     private SpaceResponseDto convertToResponseDto(Spaces space) {
+        long productCount = spaceRepository.countProductsInSpace(space.getId());
+
         return new SpaceResponseDto(
                 space.getId(),
                 space.getName(),
                 space.getOwner().getId(),
                 space.getOwner().getName(),
-                0L, // Product count not available in this context
+                productCount,
                 space.getCreatedAt(),
                 space.getUpdatedAt());
-    }
-
-    // Helper methods for request context
-    private String getClientIpAddress() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                String xForwardedFor = request.getHeader("X-Forwarded-For");
-                if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-                    return xForwardedFor.split(",")[0].trim();
-                }
-                return request.getRemoteAddr();
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
-    }
-
-    private String getUserAgent() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                return request.getHeader("User-Agent");
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
     }
 }

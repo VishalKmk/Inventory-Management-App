@@ -1,13 +1,11 @@
 package app.web.inventory.service;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import app.web.inventory.dto.audit.AuditLogDto;
 import app.web.inventory.dto.audit.AuditLogFilterRequest;
 import app.web.inventory.dto.audit.AuditLogSummaryDto;
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import app.web.inventory.model.AuditLog;
 import app.web.inventory.repository.AuditLogRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -167,47 +166,46 @@ public class AuditLogService {
     }
 
     /**
-     * Get activity trends for analytics - returns DTO
+     * Get activity trends for analytics
      */
     public ActivityTrendsDto getActivityTrends(UUID userId, int days) {
-        LocalDateTime startDate = LocalDateTime.now().minusDays(days);
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        if (days <= 0 || days > 365) {
+            throw new IllegalArgumentException("Days must be between 1 and 365");
+        }
+
+        // Single timestamp reference - avoids microsecond drift
         LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime startDate = endDate.minusDays(days);
 
-        // For simplicity, get all logs in the period and group by day
-        Page<AuditLog> logs = auditLogRepository.findByUserIdAndTimestampBetweenOrderByTimestampDesc(
-                userId, startDate, endDate, Pageable.unpaged());
+        // All counting done in DB - no rows loaded into memory
+        @SuppressWarnings("null")
+        Map<String, Long> dailyActivity = auditLogRepository
+                .countDailyActivityByUser(userId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> row[0].toString(),
+                        row -> (Long) row[1]));
 
-        Map<String, Long> dailyActivity = logs.getContent().stream()
-                .collect(Collectors.groupingBy(
-                        log -> log.getTimestamp().toLocalDate().toString(),
-                        Collectors.counting()));
+        @SuppressWarnings("null")
+        Map<String, Long> operationBreakdown = auditLogRepository
+                .countOperationBreakdownByUser(userId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]));
 
-        Map<String, Long> operationBreakdown = logs.getContent().stream()
-                .collect(Collectors.groupingBy(
-                        AuditLog::getOperation,
-                        Collectors.counting()));
+        @SuppressWarnings("null")
+        long totalActivities = auditLogRepository
+                .countByUserIdAndTimestampBetween(userId, startDate, endDate);
 
         return new ActivityTrendsDto(
                 dailyActivity,
                 operationBreakdown,
-                logs.getTotalElements(),
+                totalActivities,
                 days + " days");
-    }
-
-    /**
-     * Get activity trends for analytics - returns Map (for backward compatibility
-     * with DashboardService)
-     */
-    public Map<String, Object> getActivityTrendsAsMap(UUID userId, int days) {
-        ActivityTrendsDto dto = getActivityTrends(userId, days);
-
-        Map<String, Object> trends = new HashMap<>();
-        trends.put("dailyActivity", dto.getDailyActivity());
-        trends.put("operationBreakdown", dto.getOperationBreakdown());
-        trends.put("totalActivities", dto.getTotalActivities());
-        trends.put("period", dto.getPeriod());
-
-        return trends;
     }
 
     /**

@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import app.web.inventory.config.SecurityUtil;
 import app.web.inventory.dto.api.ApiResponse;
 import app.web.inventory.dto.pagination.PaginationDto;
 import app.web.inventory.dto.product.CreateProductRequest;
@@ -25,6 +24,7 @@ import app.web.inventory.dto.product.ProductResponseDto;
 import app.web.inventory.dto.product.UpdateProductRequest;
 import app.web.inventory.dto.stock.StockOperationRequest;
 import app.web.inventory.service.ProductService;
+import app.web.inventory.util.SecurityUtil;
 import jakarta.validation.Valid;
 
 @RestController

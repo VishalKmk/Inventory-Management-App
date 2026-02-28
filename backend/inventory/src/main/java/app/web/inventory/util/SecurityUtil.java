@@ -1,4 +1,4 @@
-package app.web.inventory.config;
+package app.web.inventory.util;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

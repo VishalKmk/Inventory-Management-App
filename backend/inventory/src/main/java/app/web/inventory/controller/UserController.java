@@ -1,15 +1,20 @@
 package app.web.inventory.controller;
 
 import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.space.SpaceInviteDto;
 import app.web.inventory.dto.user.UserResponseDto;
 import app.web.inventory.model.Users;
 import app.web.inventory.service.UserService;
+import app.web.inventory.util.SecurityUtil;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -64,9 +69,9 @@ public class UserController {
      * GET /api/users/me/invites
      */
     @GetMapping("/me/invites")
-    public ResponseEntity<ApiResponse<java.util.List<app.web.inventory.dto.space.SpaceInviteDto>>> getMyInvites() {
-        java.util.UUID currentUserId = app.web.inventory.config.SecurityUtil.getCurrentUserId();
-        java.util.List<app.web.inventory.dto.space.SpaceInviteDto> invites = spaceService
+    public ResponseEntity<ApiResponse<List<SpaceInviteDto>>> getMyInvites() {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        List<SpaceInviteDto> invites = spaceService
                 .getPendingInvites(currentUserId);
 
         return ResponseEntity.ok(ApiResponse.success(invites));

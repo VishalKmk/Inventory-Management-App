@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import app.web.inventory.config.SecurityUtil;
 import app.web.inventory.dto.api.ApiResponse;
 import app.web.inventory.dto.space.InviteMemberRequest;
 import app.web.inventory.dto.space.SpaceMemberDto;
 import app.web.inventory.service.SpaceService;
+import app.web.inventory.util.SecurityUtil;
 import jakarta.validation.Valid;
 
 @RestController

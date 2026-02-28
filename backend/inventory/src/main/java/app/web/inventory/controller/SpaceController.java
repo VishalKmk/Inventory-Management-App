@@ -9,8 +9,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import app.web.inventory.config.SecurityUtil;
 import app.web.inventory.service.SpaceService;
+import app.web.inventory.util.SecurityUtil;
 
 @RestController
 @RequestMapping("/api/spaces")
@@ -38,13 +38,25 @@ public class SpaceController {
     }
 
     /**
-     * Get all spaces for current user
-     * GET /api/spaces
+     * Get spaces owned by current user
+     * GET /api/spaces/owned
      */
-    @GetMapping
-    public ResponseEntity<ApiResponse<List<SpaceDto>>> getSpaces() {
+    @GetMapping("/owned")
+    public ResponseEntity<ApiResponse<List<SpaceDto>>> getOwnedSpaces() {
         UUID currentUserId = SecurityUtil.getCurrentUserId();
-        List<SpaceDto> spaces = spaceService.getSpacesWithProductCount(currentUserId);
+        List<SpaceDto> spaces = spaceService.getOwnedSpacesWithProductCount(currentUserId);
+
+        return ResponseEntity.ok(ApiResponse.success(spaces));
+    }
+
+    /**
+     * Get spaces shared with current user (member/admin of)
+     * GET /api/spaces/shared
+     */
+    @GetMapping("/shared")
+    public ResponseEntity<ApiResponse<List<SpaceDto>>> getSharedSpaces() {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        List<SpaceDto> spaces = spaceService.getSharedSpacesWithProductCount(currentUserId);
 
         return ResponseEntity.ok(ApiResponse.success(spaces));
     }

@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import app.web.inventory.config.SecurityUtil;
 import app.web.inventory.dto.api.ApiResponse;
 import app.web.inventory.dto.dashboard.DashboardOverviewDto;
 import app.web.inventory.dto.dashboard.InventoryInsightsDto;
@@ -18,6 +17,7 @@ import app.web.inventory.dto.dashboard.RecentActivityDto;
 import app.web.inventory.dto.dashboard.SpaceMetricsDto;
 import app.web.inventory.dto.dashboard.TopProductsDto;
 import app.web.inventory.service.DashboardService;
+import app.web.inventory.util.SecurityUtil;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController

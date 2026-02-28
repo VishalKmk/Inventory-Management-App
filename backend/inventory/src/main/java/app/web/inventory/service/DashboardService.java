@@ -16,6 +16,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import app.web.inventory.dto.dashboard.DashboardOverviewDto;
 import app.web.inventory.dto.dashboard.InventoryInsightsDto;
 import app.web.inventory.dto.dashboard.InventoryInsightsDto.PriceAnalysisDto;
@@ -53,22 +54,19 @@ public class DashboardService {
      * Get comprehensive dashboard overview
      */
     public DashboardOverviewDto getDashboardOverview(UUID userId) {
-        // Get basic counts
+        // Dashboard is personal - only show user's OWN spaces and products
         List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
         List<Products> products = productService.getProductsByOwner(userId);
         List<Products> lowStockProducts = productService.getLowStockProducts(userId);
 
-        // Calculate total inventory value
         double totalValue = products.stream()
                 .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
                 .sum();
 
-        // Calculate space utilization
         int maxSpaces = 10;
         int usedSpaces = spaces.size();
         double spaceUtilization = (usedSpaces / (double) maxSpaces) * 100;
 
-        // Get stock status breakdown
         Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
 
         return new DashboardOverviewDto(
@@ -79,7 +77,9 @@ public class DashboardService {
                 Math.round(totalValue * 100.0) / 100.0,
                 lowStockProducts.size(),
                 stockStatus,
-                usedSpaces > 0 ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0 : 0.0);
+                usedSpaces > 0
+                        ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0
+                        : 0.0);
     }
 
     /**
@@ -205,17 +205,25 @@ public class DashboardService {
      * Get space performance metrics
      */
     public SpaceMetricsDto getSpaceMetrics(UUID userId) {
-        List<SpaceDto> spacesWithCounts = spaceService.getSpacesWithProductCount(userId);
+        List<SpaceDto> spacesWithCounts = spaceService.getOwnedSpacesWithProductCount(userId);
 
         if (spacesWithCounts.isEmpty()) {
             return new SpaceMetricsDto(false, new ArrayList<>(), null);
         }
 
-        // Calculate space efficiency metrics
+        // Load ALL accessible products in ONE query instead of one per space
+        List<Products> allProducts = productService.getProductsByOwner(userId);
+
+        // Group by space ID in memory - no more per-space queries
+        Map<UUID, List<Products>> productsBySpace = allProducts.stream()
+                .collect(Collectors.groupingBy(p -> p.getSpace().getId()));
+
         List<SpaceMetric> spaceMetrics = spacesWithCounts.stream()
                 .map(space -> {
-                    // Get products for this space to calculate value
-                    List<Products> spaceProducts = productService.getProductsBySpace(userId, space.getId());
+                    // Just a map lookup - no DB call
+                    List<Products> spaceProducts = productsBySpace
+                            .getOrDefault(space.getId(), new ArrayList<>());
+
                     double totalValue = spaceProducts.stream()
                             .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
                             .sum();
@@ -235,7 +243,6 @@ public class DashboardService {
                 .sorted((a, b) -> Double.compare(b.getTotalValue(), a.getTotalValue()))
                 .collect(Collectors.toList());
 
-        // Summary statistics
         double totalValue = spaceMetrics.stream()
                 .mapToDouble(SpaceMetric::getTotalValue)
                 .sum();
@@ -248,7 +255,7 @@ public class DashboardService {
                 spacesWithCounts.size(),
                 Math.round(totalValue * 100.0) / 100.0,
                 totalProducts,
-                !spacesWithCounts.isEmpty() ? Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0 : 0.0);
+                Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0);
 
         return new SpaceMetricsDto(true, spaceMetrics, summary);
     }
@@ -302,55 +309,28 @@ public class DashboardService {
         List<Products> products = productService.getProductsByOwner(userId);
         List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
 
-        // Try to get historical data from audit logs
-        Map<String, Object> trendsData = auditLogService.getActivityTrendsAsMap(userId, days);
+        // Build snapshot once - used in both branches
+        CurrentSnapshot snapshot = new CurrentSnapshot(
+                new Date(),
+                products.size(),
+                spaces.size(),
+                Math.round(products.stream()
+                        .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
+                        .sum() * 100.0) / 100.0,
+                productService.getLowStockProducts(userId).size());
 
-        if (trendsData.containsKey("dailyActivity")) {
-            // We have historical data from audit logs
-            @SuppressWarnings("unchecked")
-            Map<String, Long> dailyActivity = (Map<String, Long>) trendsData.get("dailyActivity");
-            @SuppressWarnings("unchecked")
-            Map<String, Long> operationBreakdown = (Map<String, Long>) trendsData.get("operationBreakdown");
-            Long totalActivities = (Long) trendsData.get("totalActivities");
-            String period = (String) trendsData.get("period");
+        // Get trends from audit logs
+        ActivityTrendsDto trendsData = auditLogService.getActivityTrends(userId, days);
 
-            CurrentSnapshot snapshot = new CurrentSnapshot(
-                    new Date(),
-                    products.size(),
-                    spaces.size(),
-                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0)
-                            / 100.0,
-                    productService.getLowStockProducts(userId).size());
-
-            return new InventoryTrendsDto(
-                    true,
-                    snapshot,
-                    dailyActivity,
-                    operationBreakdown,
-                    totalActivities,
-                    period,
-                    null,
-                    days);
-        } else {
-            // No historical data available
-            CurrentSnapshot snapshot = new CurrentSnapshot(
-                    new Date(),
-                    products.size(),
-                    spaces.size(),
-                    Math.round(products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum() * 100.0)
-                            / 100.0,
-                    productService.getLowStockProducts(userId).size());
-
-            return new InventoryTrendsDto(
-                    false,
-                    snapshot,
-                    null,
-                    null,
-                    null,
-                    null,
-                    "Historical trend data requires audit logging system. Showing current state.",
-                    days);
-        }
+        return new InventoryTrendsDto(
+                true,
+                snapshot,
+                trendsData.getDailyActivity(),
+                trendsData.getOperationBreakdown(),
+                trendsData.getTotalActivities(),
+                trendsData.getPeriod(),
+                null,
+                days);
     }
 
     // Helper methods
