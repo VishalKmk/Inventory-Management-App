@@ -329,7 +329,7 @@ public class DashboardService {
                 trendsData.getOperationBreakdown(),
                 trendsData.getTotalActivities(),
                 trendsData.getPeriod(),
-                null,
+                "Showing inventory trends for the last " + days + " days",
                 days);
     }
 

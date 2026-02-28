@@ -128,24 +128,18 @@ public class SpaceService {
         Spaces space = getSpaceByIdAndUser(spaceId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Space not found or access denied"));
 
-        // Only OWNER (creator) or ADMIN (via member role logic, implemented later if
-        // needed) can update name
-        // For now, strict check: if not Space owner, check member role
-
         boolean isOwner = space.getOwner().getId().equals(userId);
         if (!isOwner) {
             boolean isAdmin = spaceMemberRepository.existsBySpaceIdAndUserIdAndRole(
-                    spaceId, userId, app.web.inventory.model.enums.SpaceRole.ADMIN);
+                    spaceId, userId, SpaceRole.ADMIN);
             if (!isAdmin) {
-                // Check if they are the ORIGINAL owner (which is the case if isOwner is true,
-                // but covering bases)
-                // If merely a 'MEMBER', deny
                 throw new SecurityException("Only Owners and Admins can rename spaces");
             }
         }
 
+        // Use space.getOwner().getId() instead of userId for duplicate check
         if (!space.getName().equals(newName.trim()) &&
-                spaceRepository.existsByOwnerIdAndName(userId, newName.trim())) {
+                spaceRepository.existsByOwnerIdAndName(space.getOwner().getId(), newName.trim())) {
             throw new DuplicateResourceException("Space with name '" + newName + "' already exists");
         }
 
@@ -174,7 +168,6 @@ public class SpaceService {
     /**
      * Delete a space (only if it has no products)
      */
-    // SpaceService.deleteSpace()
     public void deleteSpace(UUID spaceId, UUID userId) {
         if (spaceId == null || userId == null) {
             throw new IllegalArgumentException("Space ID and User ID cannot be null");
