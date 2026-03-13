@@ -85,22 +85,6 @@ public class SpaceMemberController {
     // Pending Invites Endpoints
     // ==========================================
 
-    /**
-     * Get my pending invites
-     * GET /api/users/me/invites (Mapped in UserController conceptually, but here
-     * for service access context?)
-     * ACTUALLY, this controller is scoped to /api/spaces/{spaceId}/members.
-     * We should probably create a separate controller or mapping for global user
-     * invites.
-     * Let's put the space-specific actions (Accept/Decline) here, and the list in
-     * UserController?
-     * Or just map it here with a different path which is weird.
-     * 
-     * Better approach:
-     * POST /api/spaces/{spaceId}/members/accept
-     * POST /api/spaces/{spaceId}/members/decline
-     */
-
     @PostMapping("/accept")
     public ResponseEntity<ApiResponse<Void>> acceptInvite(
             @PathVariable UUID spaceId) {
