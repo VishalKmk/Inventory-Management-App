@@ -44,8 +44,8 @@ public class SpaceService {
     private final EmailService emailService;
 
     public SpaceService(SpaceRepository spaceRepository, UserService userService, AuditLogService auditLogService,
-            app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository,
-            ProductRepository productRepository, EmailService emailService) {
+                        app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository,
+                        ProductRepository productRepository, EmailService emailService) {
         this.spaceRepository = spaceRepository;
         this.userService = userService;
         this.auditLogService = auditLogService;
@@ -273,6 +273,16 @@ public class SpaceService {
 
         // 4. Add member as PENDING
         SpaceRole intendedRole = request.getRole() != null ? request.getRole() : SpaceRole.MEMBER;
+
+        // Only the Owner can grant OWNER or ADMIN-level roles; Admins are capped at
+        // inviting MEMBER/VIEWER to prevent privilege escalation
+        if (!isOwner && (intendedRole == SpaceRole.OWNER || intendedRole == SpaceRole.ADMIN)) {
+            throw new SecurityException("Only the space owner can invite Admins or Owners");
+        }
+        if (intendedRole == SpaceRole.PENDING) {
+            throw new IllegalArgumentException("Cannot invite a member with role PENDING");
+        }
+
         addMemberToSpace(space, userToInvite, intendedRole, initiatorId);
 
         // 5. Audit log

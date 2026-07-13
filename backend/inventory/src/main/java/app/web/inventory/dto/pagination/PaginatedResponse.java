@@ -1,4 +1,5 @@
 package app.web.inventory.dto.pagination;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

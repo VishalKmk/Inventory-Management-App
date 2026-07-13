@@ -14,8 +14,7 @@ public class SpaceDto {
     private String ownerName;
     private long productCount;
 
-    // Add this constructor to SpaceDto.java
-    private String currentUserRole; // New field
+    private String currentUserRole;
 
     public SpaceDto(UUID id, String name, UUID ownerId, String ownerName, long productCount, String currentUserRole) {
         this.id = id;
@@ -26,7 +25,6 @@ public class SpaceDto {
         this.currentUserRole = currentUserRole;
     }
 
-    // Constructor for backward compatibility
     public SpaceDto(UUID id, String name, UUID ownerId, String ownerName, long productCount) {
         this(id, name, ownerId, ownerName, productCount, "OWNER");
     }

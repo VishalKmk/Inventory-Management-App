@@ -34,7 +34,7 @@ public class ProductService {
     private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-            AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
+                          AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
@@ -49,7 +49,7 @@ public class ProductService {
      * Create a new product in a specific space (hierarchical)
      */
     public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, Double price,
-            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, userId);
 
@@ -144,7 +144,7 @@ public class ProductService {
      * Update product details in a specific space (hierarchical)
      */
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-            String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
+                                                   String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, ownerId);
 
@@ -213,6 +213,13 @@ public class ProductService {
 
         Integer oldStock = product.getCurrentStock();
         Integer newStock = oldStock + quantity;
+
+        if (product.getMaximumQuantity() != null && newStock > product.getMaximumQuantity()) {
+            throw new IllegalArgumentException(
+                    "Cannot exceed maximum quantity. Current: " + oldStock +
+                            ", Requested: " + quantity + ", Maximum: " + product.getMaximumQuantity());
+        }
+
         product.setCurrentStock(newStock);
         Products updatedProduct = productRepository.save(product);
 
@@ -357,7 +364,7 @@ public class ProductService {
      * Get products by space with pagination
      */
     public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
-            int page, int size, String sortBy, String sortDirection) {
+                                               int page, int size, String sortBy, String sortDirection) {
 
         if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new ResourceNotFoundException("Space not found or access denied");
