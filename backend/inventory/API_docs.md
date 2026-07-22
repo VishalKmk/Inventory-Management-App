@@ -8,12 +8,15 @@ This document provides a detailed overview of the Inventory Management API endpo
 Most endpoints require authentication via a JSON Web Token (JWT). To authenticate, include the following header in your requests:
 `Authorization: Bearer <YOUR_JWT_TOKEN>`
 
-Endpoints under the `/api/auth` path are public and do not require authentication.
+Endpoints under the `/api/auth` path, as well as `/oauth2/**` and `/login/oauth2/**` (used for Google Sign-In), are public and do not require authentication.
+
+A JWT can be obtained either by logging in with email/password (see [1.3](#13-user-login)) or via Google Sign-In (see [1.5](#15-google-sign-in)). Both issue the same kind of token, usable identically across every other endpoint.
 
 ---
 
 ## Table of Contents
 1.  [Authentication](#authentication-endpoints)
+    - [Google Sign-In](#15-google-sign-in)
 2.  [Users](#user-endpoints)
 3.  [Spaces](#space-endpoints)
 4.  [Space Members](#space-member-endpoints)
@@ -150,6 +153,22 @@ Base Path: `/api/auth`
   "data": "OTP sent"
 }
 ```
+
+### 1.5 Google Sign-In
+- **Endpoint:** `GET /oauth2/authorization/google`
+- **Description:** Starts the Google Sign-In flow. This is not a JSON API call — it's a browser redirect. Point the "Sign in with Google" button at this URL directly (e.g. `window.location.href = ...` or a plain `<a href>`), not a fetch/axios call.
+- **Auth Required:** No
+
+**Flow:**
+1. The browser is redirected to this endpoint, which forwards to Google's consent screen.
+2. After the user approves, Google redirects back to the backend's callback (`/login/oauth2/code/google`), which is handled automatically — no client action needed.
+3. The backend finds or creates a user account for that Google email (auto-verified, no password set) and redirects the browser to:
+   `<frontend-url>#token=<JWT>`
+   The token is placed in the URL **fragment** (after `#`), not a query parameter, so it is never sent to any server or logged. The frontend must read it from `window.location.hash` on that page and clear it from the URL immediately after storing it.
+
+**Notes:**
+- If an account with that email already exists (created via normal email/password registration), Google Sign-In logs into that same existing account rather than creating a duplicate.
+- There is no separate JSON response for this endpoint — the JWT arrives via the redirect described above, and behaves identically to a token obtained from [1.3 User Login](#13-user-login) for all subsequent requests.
 
 ---
 
@@ -401,6 +420,11 @@ Base Path: `/api/spaces/{spaceId}/members`
 - **Auth Required:** Yes
 - **Path Variable:** `spaceId` (UUID)
 
+**Permission rules for `role`:**
+- Only the space **Owner** may invite someone with `role: "OWNER"` or `role: "ADMIN"`.
+- **Admins** may only invite with `role: "MEMBER"` or `role: "VIEWER"`. An Admin attempting to invite an `OWNER` or `ADMIN` receives a 403 error.
+- `role: "PENDING"` is never a valid value to invite with; it's an internal status.
+
 **Request Body:**
 ```json
 {
@@ -414,6 +438,15 @@ Base Path: `/api/spaces/{spaceId}/members`
 {
   "success": true,
   "message": "User invited successfully",
+  "data": null
+}
+```
+
+**Error Response (403 Forbidden) — Admin attempting to grant OWNER/ADMIN:**
+```json
+{
+  "success": false,
+  "message": "Only the space owner can invite Admins or Owners",
   "data": null
 }
 ```
@@ -554,11 +587,11 @@ Base Path: `/api/spaces/{spaceId}/products`
 - **Auth Required:** Yes
 - **Path Variable:** `spaceId` (UUID)
 - **Query Parameters:**
-  - `search` (string, optional): Filter products by name.
-  - `page` (number, default: 0)
-  - `size` (number, default: 10)
-  - `sortBy` (string, default: "name")
-  - `sortDirection` (string, default: "ASC")
+    - `search` (string, optional): Filter products by name.
+    - `page` (number, default: 0)
+    - `size` (number, default: 10)
+    - `sortBy` (string, default: "name")
+    - `sortDirection` (string, default: "ASC")
 
 **Success Response (200 OK):**
 ```json
@@ -574,7 +607,6 @@ Base Path: `/api/spaces/{spaceId}/products`
         "price": 1200.00,
         "currentStock": 10,
         "minimumQuantity": 5,
-        "maximumQuantity": 20
       }
     ],
     "pagination": {
@@ -641,7 +673,7 @@ Base Path: `/api/spaces/{spaceId}/products`
 
 ### 5.5 Add Stock
 - **Endpoint:** `POST /api/spaces/{spaceId}/products/{productId}/stock/add`
-- **Description:** Adds a specified quantity to a product's stock. Requires write access.
+- **Description:** Adds a specified quantity to a product's stock. Requires write access. The resulting stock cannot exceed the product's `maximumQuantity`.
 - **Auth Required:** Yes
 - **Path Variables:** `spaceId` (UUID), `productId` (UUID)
 
@@ -658,6 +690,15 @@ Base Path: `/api/spaces/{spaceId}/products`
   "success": true,
   "message": "Stock added successfully",
   "data": { ... } // Updated product object with new stock
+}
+```
+
+**Error Response (400 Bad Request) — exceeds maximumQuantity:**
+```json
+{
+  "success": false,
+  "message": "Cannot exceed maximum quantity. Current: 18, Requested: 5, Maximum: 20",
+  "data": null
 }
 ```
 
@@ -735,11 +776,11 @@ Base Path: `/api/audit-logs`
 - **Description:** Retrieves a paginated and filterable list of audit logs for the user's activities.
 - **Auth Required:** Yes
 - **Query Parameters:**
-  - `entityType` (string, e.g., "SPACE", "PRODUCT")
-  - `operation` (string, e.g., "CREATE", "UPDATE")
-  - `entityId` (UUID)
-  - `startDate`, `endDate` (ISO DateTime string)
-  - `page`, `size`, `sortBy`, `sortDirection`
+    - `entityType` (string, e.g., "SPACE", "PRODUCT")
+    - `operation` (string, e.g., "CREATE", "UPDATE")
+    - `entityId` (UUID)
+    - `startDate`, `endDate` (ISO DateTime string)
+    - `page`, `size`, `sortBy`, `sortDirection`
 
 **Success Response (200 OK):**
 ```json
@@ -1015,8 +1056,8 @@ Base Path: `/api/dashboard`
 - **Description:** Retrieves a list of top products based on value, price, or stock.
 - **Auth Required:** Yes
 - **Query Parameters:**
-  - `limit` (number, default: 5)
-  - `sortBy` (string, default: "value", options: "value", "price", "stock")
+    - `limit` (number, default: 5)
+    - `sortBy` (string, default: "value", options: "value", "price", "stock")
 
 **Success Response (200 OK):**
 ```json

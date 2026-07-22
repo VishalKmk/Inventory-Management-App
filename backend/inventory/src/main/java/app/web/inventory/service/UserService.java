@@ -30,9 +30,23 @@ public class UserService {
         user.setName(name);
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setAuthProvider("local");
         user.setVerified(false);
 
         return userRepository.save(user);
+    }
+
+    public Users findOrCreateGoogleUser(String email, String name) {
+        return userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    Users user = new Users();
+                    user.setName(name);
+                    user.setEmail(email);
+                    user.setPasswordHash(null);
+                    user.setAuthProvider("google");
+                    user.setVerified(true);
+                    return userRepository.save(user);
+                });
     }
 
     public Optional<Users> findByEmail(String email) {
@@ -45,6 +59,9 @@ public class UserService {
     }
 
     public boolean checkPassword(Users user, String rawPassword) {
+        if (user.getPasswordHash() == null) {
+            return false; // Google-only account has no local password to check
+        }
         return passwordEncoder.matches(rawPassword, user.getPasswordHash());
     }
 
@@ -53,9 +70,7 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    /**
-     * Convert Users entity to UserDto
-     */
+    // Convert Users entity to UserDto
     public UserDto convertToDto(Users user) {
         return new UserDto(
                 user.getId(),
@@ -65,16 +80,12 @@ public class UserService {
                 user.getCreatedAt());
     }
 
-    /**
-     * Get user as DTO by email
-     */
+    // Get user as DTO by email
     public Optional<UserDto> getUserDtoByEmail(String email) {
         return findByEmail(email).map(this::convertToDto);
     }
 
-    /**
-     * Get user as DTO by ID
-     */
+    // Get user as DTO by ID
     public Optional<UserDto> getUserDtoById(UUID id) {
         return findById(id).map(this::convertToDto);
     }

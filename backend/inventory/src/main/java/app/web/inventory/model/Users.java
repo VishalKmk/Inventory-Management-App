@@ -31,8 +31,11 @@ public class Users {
     @Column(unique = true, nullable = false)
     private String email;
 
-    @Column(nullable = false)
+    @Column
     private String passwordHash;
+
+    @Column
+    private String authProvider; // "local" or "google"
 
     @Column(nullable = false)
     private String name;

@@ -15,6 +15,7 @@ import app.web.inventory.dto.dashboard.InventoryTrendsDto;
 import app.web.inventory.dto.dashboard.LowStockAlertsDto;
 import app.web.inventory.dto.dashboard.RecentActivityDto;
 import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.SpaceDashboardDto;
 import app.web.inventory.dto.dashboard.TopProductsDto;
 import app.web.inventory.service.DashboardService;
 import app.web.inventory.util.SecurityUtil;
@@ -48,6 +49,14 @@ public class DashboardController {
             return ResponseEntity.status(500)
                     .body(ApiResponse.error("Internal server error"));
         }
+    }
+
+    @GetMapping("/spaces/{spaceId}")
+    public ResponseEntity<ApiResponse<SpaceDashboardDto>> getSpaceDashboard(
+            @org.springframework.web.bind.annotation.PathVariable UUID spaceId,
+            @RequestParam(defaultValue = "30") int days) {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getSpaceDashboard(currentUserId, spaceId, days)));
     }
 
     /**

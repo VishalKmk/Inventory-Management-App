@@ -15,6 +15,9 @@ public class ProductResponseDto {
     private UUID spaceId;
     private String spaceName;
     private String name;
+    private String sku;
+    private String category;
+    private String imageUrl;
     private Double price;
     private Integer currentStock;
     private Integer minimumQuantity;

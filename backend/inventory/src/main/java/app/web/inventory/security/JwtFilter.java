@@ -35,7 +35,9 @@ public class JwtFilter extends OncePerRequestFilter {
         if (path.startsWith("/api/auth/")
                 || path.equals("/api/health")
                 || path.startsWith("/swagger-ui")
-                || path.startsWith("/v3/api-docs")) {
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/oauth2/")
+                || path.startsWith("/login/oauth2/")) {
             chain.doFilter(request, response); // publicly accessible routes - let SecurityConfig decide
             return;
         }

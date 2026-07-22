@@ -8,11 +8,14 @@ import app.web.inventory.dto.audit.*;
 import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import app.web.inventory.dto.pagination.PaginationDto;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.service.AuditLogService;
+import app.web.inventory.service.SpaceService;
 import app.web.inventory.util.SecurityUtil;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,9 +25,11 @@ import lombok.extern.slf4j.Slf4j;
 public class AuditLogController {
 
     private final AuditLogService auditLogService;
+    private final SpaceService spaceService;
 
-    public AuditLogController(AuditLogService auditLogService) {
+    public AuditLogController(AuditLogService auditLogService, SpaceService spaceService) {
         this.auditLogService = auditLogService;
+        this.spaceService = spaceService;
     }
 
     /**
@@ -76,6 +81,20 @@ public class AuditLogController {
             return ResponseEntity.status(500)
                     .body(ApiResponse.error("Internal server error"));
         }
+    }
+
+    @GetMapping("/spaces/{spaceId}")
+    public ResponseEntity<ApiResponse<AuditLogListDto>> getSpaceAuditLogs(
+            @PathVariable UUID spaceId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        if (!spaceService.hasAccessToSpace(spaceId, currentUserId)) {
+            return ResponseEntity.status(404).body(ApiResponse.error("Space not found or access denied"));
+        }
+        Page<AuditLogDto> logs = auditLogService.getSpaceAuditLogs(spaceId, PageRequest.of(page, size, Sort.by("timestamp").descending()));
+        PaginationDto pagination = new PaginationDto(logs.getNumber(), logs.getSize(), logs.getTotalElements(), logs.getTotalPages(), logs.hasNext(), logs.hasPrevious());
+        return ResponseEntity.ok(ApiResponse.success(new AuditLogListDto(logs.getContent(), pagination)));
     }
 
     /**
