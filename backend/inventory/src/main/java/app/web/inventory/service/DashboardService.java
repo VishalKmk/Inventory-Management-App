@@ -28,6 +28,7 @@ import app.web.inventory.dto.dashboard.LowStockAlertsDto.AlertInfo;
 import app.web.inventory.dto.dashboard.RecentActivityDto;
 import app.web.inventory.dto.dashboard.RecentActivityDto.ActivityItem;
 import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.SpaceDashboardDto;
 import app.web.inventory.dto.dashboard.SpaceMetricsDto.SpaceMetric;
 import app.web.inventory.dto.dashboard.SpaceMetricsDto.SummaryDto;
 import app.web.inventory.dto.dashboard.TopProductsDto;
@@ -54,10 +55,10 @@ public class DashboardService {
      * Get comprehensive dashboard overview
      */
     public DashboardOverviewDto getDashboardOverview(UUID userId) {
-        // Dashboard is personal - only show user's OWN spaces and products
-        List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
-        List<Products> products = productService.getProductsByOwner(userId);
-        List<Products> lowStockProducts = productService.getLowStockProducts(userId);
+        // The main dashboard covers every space the user can access, including shared spaces.
+        List<Spaces> spaces = spaceService.getAccessibleSpaces(userId);
+        List<Products> products = productService.getAccessibleProducts(userId);
+        List<Products> lowStockProducts = productService.getAccessibleLowStockProducts(userId);
 
         double totalValue = products.stream()
                 .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
@@ -82,11 +83,30 @@ public class DashboardService {
                         : 0.0);
     }
 
+    public SpaceDashboardDto getSpaceDashboard(UUID userId, UUID spaceId, int days) {
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
+            throw new app.web.inventory.exception.ResourceNotFoundException("Space not found or access denied");
+        }
+        Spaces space = spaceService.getSpaceById(spaceId);
+        List<Products> products = productService.getProductsBySpace(userId, spaceId);
+        List<Products> lowStock = products.stream().filter(productService::isLowStock).collect(Collectors.toList());
+        Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
+        double totalValue = products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum();
+        DashboardOverviewDto overview = new DashboardOverviewDto(1, 1, 100.0, products.size(),
+                Math.round(totalValue * 100.0) / 100.0, lowStock.size(), stockStatus, (double) products.size());
+        List<TopProductsDto.ProductSummary> alerts = lowStock.stream().map(this::createProductSummary).collect(Collectors.toList());
+        List<AuditLogDto> recent = auditLogService.getRecentActivityForSpace(spaceId, 24 * 7);
+        ActivityTrendsDto trends = auditLogService.getSpaceActivityTrends(spaceId, days);
+        long memberCount = spaceService.getSpaceMembers(spaceId, userId, org.springframework.data.domain.Pageable.unpaged()).getTotalElements();
+        return new SpaceDashboardDto(spaceId, space.getName(), spaceService.getUserRoleInSpace(spaceId, userId).name(), memberCount,
+                overview, alerts, recent, trends);
+    }
+
     /**
      * Get detailed inventory insights
      */
     public InventoryInsightsDto getInventoryInsights(UUID userId) {
-        List<Products> products = productService.getProductsByOwner(userId);
+        List<Products> products = productService.getAccessibleProducts(userId);
 
         if (products.isEmpty()) {
             return new InventoryInsightsDto(false, null, null, new HashMap<>(), new HashMap<>());
@@ -136,7 +156,7 @@ public class DashboardService {
      * Get low stock alerts with detailed information
      */
     public LowStockAlertsDto getLowStockAlerts(UUID userId) {
-        List<Products> lowStockProducts = productService.getLowStockProducts(userId);
+        List<Products> lowStockProducts = productService.getAccessibleLowStockProducts(userId);
 
         // Group by space for better organization
         Map<String, List<AlertInfo>> alertsBySpace = lowStockProducts.stream()
@@ -205,14 +225,16 @@ public class DashboardService {
      * Get space performance metrics
      */
     public SpaceMetricsDto getSpaceMetrics(UUID userId) {
-        List<SpaceDto> spacesWithCounts = spaceService.getOwnedSpacesWithProductCount(userId);
+        List<SpaceDto> spacesWithCounts = new ArrayList<>();
+        spacesWithCounts.addAll(spaceService.getOwnedSpacesWithProductCount(userId));
+        spacesWithCounts.addAll(spaceService.getSharedSpacesWithProductCount(userId));
 
         if (spacesWithCounts.isEmpty()) {
             return new SpaceMetricsDto(false, new ArrayList<>(), null);
         }
 
         // Load ALL accessible products in ONE query instead of one per space
-        List<Products> allProducts = productService.getProductsByOwner(userId);
+        List<Products> allProducts = productService.getAccessibleProducts(userId);
 
         // Group by space ID in memory - no more per-space queries
         Map<UUID, List<Products>> productsBySpace = allProducts.stream()
@@ -264,7 +286,7 @@ public class DashboardService {
      * Get top products by various criteria
      */
     public TopProductsDto getTopProducts(UUID userId, int limit, String sortBy) {
-        List<Products> products = productService.getProductsByOwner(userId);
+        List<Products> products = productService.getAccessibleProducts(userId);
 
         if (products.isEmpty()) {
             return new TopProductsDto(false, new ArrayList<>(), sortBy, limit);
@@ -306,8 +328,8 @@ public class DashboardService {
      * Get inventory trends
      */
     public InventoryTrendsDto getInventoryTrends(UUID userId, int days) {
-        List<Products> products = productService.getProductsByOwner(userId);
-        List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
+        List<Products> products = productService.getAccessibleProducts(userId);
+        List<Spaces> spaces = spaceService.getAccessibleSpaces(userId);
 
         // Build snapshot once - used in both branches
         CurrentSnapshot snapshot = new CurrentSnapshot(
@@ -317,7 +339,7 @@ public class DashboardService {
                 Math.round(products.stream()
                         .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
                         .sum() * 100.0) / 100.0,
-                productService.getLowStockProducts(userId).size());
+                productService.getAccessibleLowStockProducts(userId).size());
 
         // Get trends from audit logs
         ActivityTrendsDto trendsData = auditLogService.getActivityTrends(userId, days);

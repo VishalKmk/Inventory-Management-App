@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public class SecurityUtil {
+
     @SuppressWarnings("unchecked")
     public static UUID getCurrentUserId() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -21,7 +22,9 @@ public class SecurityUtil {
         Authentication a = SecurityContextHolder.getContext().getAuthentication();
         if (a == null)
             return null;
+
         Object principal = a.getPrincipal();
+
         if (principal instanceof Map) {
             return (String) ((Map<?, ?>) principal).get("email");
         }

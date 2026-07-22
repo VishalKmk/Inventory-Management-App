@@ -28,41 +28,49 @@ public class JwtFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(@SuppressWarnings("null") HttpServletRequest request,
-            @SuppressWarnings("null") HttpServletResponse response, @SuppressWarnings("null") FilterChain chain)
+                                    @SuppressWarnings("null") HttpServletResponse response, @SuppressWarnings("null") FilterChain chain)
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        if (path.startsWith("/api/auth/")) {
-            chain.doFilter(request, response); // skip JWT for auth routes
+        if (path.startsWith("/api/auth/")
+                || path.equals("/api/health")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/oauth2/")
+                || path.startsWith("/login/oauth2/")) {
+            chain.doFilter(request, response); // publicly accessible routes - let SecurityConfig decide
             return;
         }
 
-        // JWT validation
+        // JWT validation - require a well-formed Bearer token for every non-auth route
         String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            try {
-                Jws<Claims> claims = jwtUtil.parseToken(token);
-                String userId = claims.getBody().getSubject();
-                String email = (String) claims.getBody().get("email");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
 
-                Map<String, Object> principal = Map.of(
-                        "userId", UUID.fromString(userId),
-                        "email", email);
+        String token = authHeader.substring(7);
+        try {
+            Jws<Claims> claims = jwtUtil.parseToken(token);
+            String userId = claims.getBody().getSubject();
+            String email = (String) claims.getBody().get("email");
 
-                // Set authenticated user in context
-                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                        principal, // principal is now a Map containing userId and email
-                        null,
-                        Collections.emptyList() // no authorities for now
-                );
-                SecurityContextHolder.getContext().setAuthentication(auth);
+            Map<String, Object> principal = Map.of(
+                    "userId", UUID.fromString(userId),
+                    "email", email);
 
-            } catch (Exception ex) {
-                // invalid token → return unauthorized
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
+            // Set authenticated user in context
+            UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                    principal, // principal is now a Map containing userId and email
+                    null,
+                    Collections.emptyList() // no authorities for now
+            );
+            SecurityContextHolder.getContext().setAuthentication(auth);
+
+        } catch (Exception ex) {
+            // invalid token → return unauthorized
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
         }
 
         chain.doFilter(request, response);

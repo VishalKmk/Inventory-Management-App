@@ -81,10 +81,6 @@ public class SpaceMemberController {
         return ResponseEntity.ok(ApiResponse.success("Member removed successfully", null));
     }
 
-    // ==========================================
-    // Pending Invites Endpoints
-    // ==========================================
-
     @PostMapping("/accept")
     public ResponseEntity<ApiResponse<Void>> acceptInvite(
             @PathVariable UUID spaceId) {

@@ -1,7 +1,7 @@
 package app.web.inventory.service;
 
+import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Random;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,7 +15,7 @@ import jakarta.transaction.Transactional;
 public class OtpService {
     private final OtpRepository otpRepository;
     private final int ttlMinutes;
-    private final Random rnd = new Random();
+    private final SecureRandom rnd = new SecureRandom();
 
     public OtpService(OtpRepository otpRepository, @Value("${app.otp.ttl-minutes:10}") int ttlMinutes) {
         this.otpRepository = otpRepository;
@@ -58,7 +58,6 @@ public class OtpService {
 
         boolean isValid = otp.getCode().equals(code);
 
-        // Delete OTP whether valid or not - prevents brute force reuse
         otpRepository.delete(otp);
 
         return isValid;

@@ -1,0 +1,253 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #F5F5F5;
+  --foreground: #111827;
+  --primary: #1A1A2E;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F3F4F6;
+  --secondary-foreground: #374151;
+  --accent: #3B82F6;
+  --accent-foreground: #FFFFFF;
+  --muted: #E5E7EB;
+  --muted-foreground: #6B7280;
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --border: #E5E7EB;
+  --input: #F9FAFB;
+  --ring: #3B82F6;
+  --radius: 10px;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --danger: #EF4444;
+  --danger-foreground: #FEF2F2;
+  --warning: #F59E0B;
+  --warning-foreground: #FFFBEB;
+  --success: #10B981;
+  --success-foreground: #ECFDF5;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  h1, h2, h3, h4, h5, h6, p {
+    margin: 0;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.65);
+    transition: background 150ms ease, color 150ms ease;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .sidebar-nav-item:hover {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.95);
+  }
+  .sidebar-nav-item.active {
+    background: rgba(255,255,255,0.12);
+    color: #FFFFFF;
+  }
+  .stock-bar-track {
+    background-color: #E5E7EB;
+    border-radius: 9999px;
+    height: 6px;
+    overflow: hidden;
+  }
+  .stock-bar-fill-healthy {
+    background-color: #1A1A2E;
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 300ms ease;
+  }
+  .stock-bar-fill-low {
+    background-color: #F59E0B;
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 300ms ease;
+  }
+  .stock-bar-fill-critical {
+    background-color: #EF4444;
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 300ms ease;
+  }
+  .kpi-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .kpi-card-dark {
+    background: #1A1A2E;
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    color: white;
+  }
+  .section-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .badge-critical {
+    background-color: #FEF2F2;
+    color: #DC2626;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .badge-high {
+    background-color: #FFFBEB;
+    color: #D97706;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .badge-medium {
+    background-color: #FEF9C3;
+    color: #CA8A04;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .badge-sku {
+    background-color: #EFF6FF;
+    color: #2563EB;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.02em;
+  }
+  .badge-operation {
+    background-color: #F3F4F6;
+    color: #6B7280;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .btn-primary {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+    padding: 0.5rem 1.125rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+  .btn-primary:hover {
+    opacity: 0.9;
+  }
+  .btn-primary:active {
+    transform: scale(0.97);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background-color: var(--card);
+    color: var(--foreground);
+    padding: 0.5rem 1.125rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 150ms ease, transform 150ms ease;
+  }
+  .btn-secondary:hover {
+    background-color: #F9FAFB;
+  }
+  .btn-secondary:active {
+    transform: scale(0.97);
+  }
+  .input-field {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    background-color: var(--input);
+    color: var(--foreground);
+    outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    font-family: var(--font-sans);
+  }
+  .input-field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+  }
+  .input-field::placeholder {
+    color: var(--muted-foreground);
+  }
+  .fade-in {
+    animation: fadeIn 200ms ease forwards;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide-up {
+    animation: slideUp 200ms ease forwards;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .pulse-highlight {
+    animation: pulseHighlight 600ms ease;
+  }
+  @keyframes pulseHighlight {
+    0% { background-color: transparent; }
+    30% { background-color: rgba(250,204,21,0.15); }
+    100% { background-color: transparent; }
+  }
+}

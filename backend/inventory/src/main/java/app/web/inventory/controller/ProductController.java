@@ -52,6 +52,9 @@ public class ProductController {
                                 currentUserId,
                                 spaceId,
                                 request.getName(),
+                                request.getSku(),
+                                request.getCategory(),
+                                request.getImageUrl(),
                                 request.getPrice(),
                                 request.getCurrentStock(),
                                 request.getMinimumQuantity(),
@@ -123,8 +126,11 @@ public class ProductController {
                                 productId,
                                 spaceId,
                                 currentUserId,
-                                request.getName(),
-                                request.getPrice(),
+                        request.getName(),
+                        request.getSku(),
+                        request.getCategory(),
+                        request.getImageUrl(),
+                        request.getPrice(),
                                 request.getMinimumQuantity(),
                                 request.getMaximumQuantity());
 

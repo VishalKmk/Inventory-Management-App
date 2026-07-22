@@ -14,6 +14,34 @@ import app.web.inventory.model.AuditLog;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
+        @Query("SELECT a FROM AuditLog a WHERE a.entityId = :spaceId OR a.relatedEntityId = :spaceId ORDER BY a.timestamp DESC")
+        Page<AuditLog> findBySpaceId(@Param("spaceId") UUID spaceId, Pageable pageable);
+
+        @Query("""
+                SELECT a FROM AuditLog a
+                WHERE (a.entityId = :spaceId OR a.relatedEntityId = :spaceId)
+                AND (:entityType IS NULL OR a.entityType = :entityType)
+                AND (:operation IS NULL OR a.operation = :operation)
+                AND (:startDate IS NULL OR a.timestamp >= :startDate)
+                AND (:endDate IS NULL OR a.timestamp <= :endDate)
+                """)
+        Page<AuditLog> findBySpaceIdWithFilters(
+                        @Param("spaceId") UUID spaceId,
+                        @Param("entityType") String entityType,
+                        @Param("operation") String operation,
+                        @Param("startDate") LocalDateTime startDate,
+                        @Param("endDate") LocalDateTime endDate,
+                        Pageable pageable);
+
+        @Query("SELECT a FROM AuditLog a WHERE (a.entityId = :spaceId OR a.relatedEntityId = :spaceId) AND a.timestamp >= :since ORDER BY a.timestamp DESC")
+        List<AuditLog> findRecentActivityBySpaceId(@Param("spaceId") UUID spaceId, @Param("since") LocalDateTime since);
+
+        @Query("SELECT CAST(a.timestamp AS DATE), COUNT(a) FROM AuditLog a WHERE (a.entityId = :spaceId OR a.relatedEntityId = :spaceId) AND a.timestamp BETWEEN :startDate AND :endDate GROUP BY CAST(a.timestamp AS DATE)")
+        List<Object[]> countDailyActivityBySpaceId(@Param("spaceId") UUID spaceId, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+        @Query("SELECT a.operation, COUNT(a) FROM AuditLog a WHERE (a.entityId = :spaceId OR a.relatedEntityId = :spaceId) AND a.timestamp BETWEEN :startDate AND :endDate GROUP BY a.operation")
+        List<Object[]> countOperationBreakdownBySpaceId(@Param("spaceId") UUID spaceId, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
         // Find audit logs by user
         Page<AuditLog> findByUserIdOrderByTimestampDesc(UUID userId, Pageable pageable);
 

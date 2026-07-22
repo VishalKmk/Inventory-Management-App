@@ -165,6 +165,38 @@ public class AuditLogService {
                 .collect(Collectors.toList());
     }
 
+    public Page<AuditLogDto> getSpaceAuditLogs(UUID spaceId, Pageable pageable) {
+        return auditLogRepository.findBySpaceId(spaceId, pageable).map(this::convertToDto);
+    }
+
+    public Page<AuditLogDto> getSpaceAuditLogs(UUID spaceId, AuditLogFilterRequest request) {
+        Sort sort = Sort.by(Sort.Direction.fromString(request.getSortDirection()), request.getSortBy());
+        Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
+        String entityType = normalizeFilter(request.getEntityType());
+        String operation = normalizeFilter(request.getOperation());
+        return auditLogRepository.findBySpaceIdWithFilters(
+                spaceId, entityType, operation, request.getStartDate(), request.getEndDate(), pageable)
+                .map(this::convertToDto);
+    }
+
+    public List<AuditLogDto> getRecentActivityForSpace(UUID spaceId, int hours) {
+        return auditLogRepository.findRecentActivityBySpaceId(spaceId, LocalDateTime.now().minusHours(hours)).stream()
+                .limit(50)
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    public ActivityTrendsDto getSpaceActivityTrends(UUID spaceId, int days) {
+        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime startDate = endDate.minusDays(days);
+        Map<String, Long> daily = auditLogRepository.countDailyActivityBySpaceId(spaceId, startDate, endDate).stream()
+                .collect(Collectors.toMap(row -> row[0].toString(), row -> (Long) row[1]));
+        Map<String, Long> operations = auditLogRepository.countOperationBreakdownBySpaceId(spaceId, startDate, endDate).stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
+        long total = daily.values().stream().mapToLong(Long::longValue).sum();
+        return new ActivityTrendsDto(daily, operations, total, days + " days");
+    }
+
     /**
      * Get activity trends for analytics
      */
@@ -222,5 +254,9 @@ public class AuditLogService {
                 auditLog.getIpAddress(),
                 auditLog.getRelatedEntityId(),
                 auditLog.getRelatedEntityType());
+    }
+
+    private String normalizeFilter(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toUpperCase();
     }
 }

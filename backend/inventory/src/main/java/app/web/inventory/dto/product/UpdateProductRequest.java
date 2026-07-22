@@ -9,6 +9,15 @@ public class UpdateProductRequest {
     @Size(min = 1, max = 255, message = "Product name must be between 1 and 255 characters")
     private String name;
 
+    @Size(max = 100, message = "SKU must not exceed 100 characters")
+    private String sku;
+
+    @Size(max = 100, message = "Category must not exceed 100 characters")
+    private String category;
+
+    @Size(max = 2048, message = "Image URL must not exceed 2048 characters")
+    private String imageUrl;
+
     @DecimalMin(value = "0.0", inclusive = true, message = "Price must be non-negative")
     private Double price;
 

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,7 +35,7 @@ public class ProductService {
     private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-            AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
+                          AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
@@ -48,8 +49,9 @@ public class ProductService {
     /**
      * Create a new product in a specific space (hierarchical)
      */
-    public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, Double price,
-            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+    public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, String sku, String category,
+                                            String imageUrl, Double price,
+                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, userId);
 
@@ -68,6 +70,9 @@ public class ProductService {
         Products product = new Products();
         product.setSpace(space);
         product.setName(name.trim());
+        product.setSku(normalizeOptional(sku));
+        product.setCategory(normalizeOptional(category));
+        product.setImageUrl(normalizeOptional(imageUrl));
         product.setPrice(price);
         product.setCurrentStock(currentStock);
         product.setMinimumQuantity(minimumQuantity);
@@ -144,7 +149,8 @@ public class ProductService {
      * Update product details in a specific space (hierarchical)
      */
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-            String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
+                                                   String name, String sku, String category, String imageUrl,
+                                                   Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, ownerId);
 
@@ -157,6 +163,21 @@ public class ProductService {
             changes.put("oldName", product.getName());
             changes.put("newName", name.trim());
             product.setName(name.trim());
+        }
+        if (sku != null && !Objects.equals(normalizeOptional(sku), product.getSku())) {
+            changes.put("oldSku", product.getSku());
+            changes.put("newSku", normalizeOptional(sku));
+            product.setSku(normalizeOptional(sku));
+        }
+        if (category != null && !Objects.equals(normalizeOptional(category), product.getCategory())) {
+            changes.put("oldCategory", product.getCategory());
+            changes.put("newCategory", normalizeOptional(category));
+            product.setCategory(normalizeOptional(category));
+        }
+        if (imageUrl != null && !Objects.equals(normalizeOptional(imageUrl), product.getImageUrl())) {
+            changes.put("oldImageUrl", product.getImageUrl());
+            changes.put("newImageUrl", normalizeOptional(imageUrl));
+            product.setImageUrl(normalizeOptional(imageUrl));
         }
         if (price != null && price >= 0 && !price.equals(product.getPrice())) {
             changes.put("oldPrice", product.getPrice());
@@ -213,6 +234,13 @@ public class ProductService {
 
         Integer oldStock = product.getCurrentStock();
         Integer newStock = oldStock + quantity;
+
+        if (product.getMaximumQuantity() != null && newStock > product.getMaximumQuantity()) {
+            throw new IllegalArgumentException(
+                    "Cannot exceed maximum quantity. Current: " + oldStock +
+                            ", Requested: " + quantity + ", Maximum: " + product.getMaximumQuantity());
+        }
+
         product.setCurrentStock(newStock);
         Products updatedProduct = productRepository.save(product);
 
@@ -357,7 +385,7 @@ public class ProductService {
      * Get products by space with pagination
      */
     public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
-            int page, int size, String sortBy, String sortDirection) {
+                                               int page, int size, String sortBy, String sortDirection) {
 
         if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new ResourceNotFoundException("Space not found or access denied");
@@ -416,6 +444,10 @@ public class ProductService {
                 product.getCurrentStock() <= product.getMinimumQuantity();
     }
 
+    private String normalizeOptional(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
     /**
      * Convert Product entity to simple DTO (for lists)
      */
@@ -424,6 +456,9 @@ public class ProductService {
                 product.getId(),
                 product.getSpace().getId(),
                 product.getName(),
+                product.getSku(),
+                product.getCategory(),
+                product.getImageUrl(),
                 product.getPrice(),
                 product.getCurrentStock(),
                 product.getMinimumQuantity(),
@@ -439,6 +474,9 @@ public class ProductService {
                 product.getSpace().getId(),
                 product.getSpace().getName(),
                 product.getName(),
+                product.getSku(),
+                product.getCategory(),
+                product.getImageUrl(),
                 product.getPrice(),
                 product.getCurrentStock(),
                 product.getMinimumQuantity(),
