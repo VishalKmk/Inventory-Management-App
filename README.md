@@ -202,6 +202,14 @@ npm run type-check
 
 ---
 
+## AI-Assisted Development
+
+This project was developed with AI assistance as a productivity tool for tasks such as brainstorming, debugging, documentation, refactoring suggestions, and implementation guidance.
+
+All architectural decisions, feature selection, integration, testing, and final code review were performed by me. The project was built as a learning exercise, and I understand and maintain the codebase myself.
+
+---
+
 ## 📄 License
 
 This project is licensed under the Apache License 2.0
