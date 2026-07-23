@@ -1,4 +1,4 @@
-﻿# Inventory Management App
+# Inventory Management App
 
 A full-stack inventory management application with a React/Next.js frontend and a Spring Boot backend.
 
