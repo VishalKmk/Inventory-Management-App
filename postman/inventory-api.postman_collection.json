@@ -1,0 +1,510 @@
+{
+  "info": {
+    "name": "Inventory Management API",
+    "description": "Full collection for the Inventory Management backend, covering Auth (including Google SSO), Users, Spaces, Space Members, Products, Audit Logs, and Dashboard endpoints.\n\nHow to use:\n1. Import this collection and the accompanying environment file.\n2. Select the 'Inventory Management - Local' environment in Postman.\n3. Run '1.1 Register a New User', then verify OTP (check your email/console for the code), then '1.3 User Login' — this automatically saves the JWT into the `token` variable for every other request.\n4. Run '3.1 Create a New Space' — this automatically saves the created space's ID into the `spaceId` variable.\n5. Everything else just works from there.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "userEmail", "value": "john.doe@example.com", "type": "string" },
+    { "key": "userPassword", "value": "Password123!", "type": "string" },
+    { "key": "otpCode", "value": "", "type": "string" },
+    { "key": "spaceId", "value": "", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" },
+    { "key": "memberUserId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "1.1 Register a New User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            }
+          },
+          "auth": { "type": "noauth" }
+        },
+        {
+          "name": "1.2 Verify Email with OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/verify-otp", "host": ["{{baseUrl}}"], "path": ["api", "auth", "verify-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"code\": \"{{otpCode}}\"\n}"
+            }
+          },
+          "auth": { "type": "noauth" }
+        },
+        {
+          "name": "1.3 User Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-save the JWT so every other request in this collection picks it up automatically",
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    const token = body && body.data && body.data.token;",
+                  "    if (token) {",
+                  "        pm.collectionVariables.set('token', token);",
+                  "        console.log('Saved JWT to {{token}} collection variable');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            }
+          },
+          "auth": { "type": "noauth" }
+        },
+        {
+          "name": "1.4 Resend OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/resend-otp", "host": ["{{baseUrl}}"], "path": ["api", "auth", "resend-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\"\n}"
+            }
+          },
+          "auth": { "type": "noauth" }
+        },
+        {
+          "name": "1.5 Google Sign-In (open in browser, not Postman)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/oauth2/authorization/google", "host": ["{{baseUrl}}"], "path": ["oauth2", "authorization", "google"] },
+            "description": "This is a browser redirect flow, not a plain JSON API call — Postman can send the GET, but it can't complete the Google login redirect chain like a real browser can. Paste this URL into your browser address bar instead. After completing Google login, you'll be redirected to `<frontend-url>#token=<JWT>` — copy that token and paste it into the collection's `token` variable manually if you want to test authenticated requests using a Google-issued token instead of an email/password one."
+          },
+          "auth": { "type": "noauth" }
+        }
+      ]
+    },
+    {
+      "name": "2. Users",
+      "item": [
+        {
+          "name": "2.1 Get Current User",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/me", "host": ["{{baseUrl}}"], "path": ["api", "users", "me"] }
+          }
+        },
+        {
+          "name": "2.2 Get Pending Invites",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/me/invites", "host": ["{{baseUrl}}"], "path": ["api", "users", "me", "invites"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Spaces",
+      "item": [
+        {
+          "name": "3.1 Create a New Space",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-save the created space's ID for use in every other Space/Product request",
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    const id = body && body.data && body.data.id;",
+                  "    if (id) {",
+                  "        pm.collectionVariables.set('spaceId', id);",
+                  "        console.log('Saved space id to {{spaceId}} collection variable');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces", "host": ["{{baseUrl}}"], "path": ["api", "spaces"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Home Inventory\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.2 Get Owned Spaces",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/owned", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "owned"] }
+          }
+        },
+        {
+          "name": "3.3 Get Shared Spaces",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/shared", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "shared"] }
+          }
+        },
+        {
+          "name": "3.4 Get Space by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}"] }
+          }
+        },
+        {
+          "name": "3.5 Get Space Creation Status",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/creation-status", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "creation-status"] }
+          }
+        },
+        {
+          "name": "3.6 Update a Space",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Updated Home Inventory\"\n}"
+            }
+          }
+        },
+        {
+          "name": "3.7 Delete a Space",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Space Members",
+      "item": [
+        {
+          "name": "4.1 Invite a Member",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/members/invite", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "members", "invite"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane.doe@example.com\",\n  \"role\": \"MEMBER\"\n}"
+            },
+            "description": "Note: only the space Owner can invite with role OWNER or ADMIN. Admins inviting with those roles get a 403."
+          }
+        },
+        {
+          "name": "4.2 Get Space Members",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/members?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "spaces", "{{spaceId}}", "members"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Remove a Member",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/members/{{memberUserId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "members", "{{memberUserId}}"] }
+          }
+        },
+        {
+          "name": "4.4 Accept an Invite",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/members/accept", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "members", "accept"] }
+          }
+        },
+        {
+          "name": "4.5 Decline an Invite",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/members/decline", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "members", "decline"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Products",
+      "item": [
+        {
+          "name": "5.1 Create a Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Auto-save the created product's ID for use in every other Product request",
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    const id = body && body.data && body.data.id;",
+                  "    if (id) {",
+                  "        pm.collectionVariables.set('productId', id);",
+                  "        console.log('Saved product id to {{productId}} collection variable');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Laptop\",\n  \"price\": 1200.00,\n  \"currentStock\": 10,\n  \"minimumQuantity\": 5,\n  \"maximumQuantity\": 20\n}"
+            }
+          }
+        },
+        {
+          "name": "5.2 Get Products in a Space",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products?page=0&size=10&sortBy=name&sortDirection=ASC",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "spaces", "{{spaceId}}", "products"],
+              "query": [
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" },
+                { "key": "sortBy", "value": "name" },
+                { "key": "sortDirection", "value": "ASC" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Get a Specific Product",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "{{productId}}"] }
+          }
+        },
+        {
+          "name": "5.4 Update a Product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "{{productId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gaming Laptop\",\n  \"price\": 1500.00\n}"
+            }
+          }
+        },
+        {
+          "name": "5.5 Add Stock",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/{{productId}}/stock/add", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "{{productId}}", "stock", "add"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}"
+            },
+            "description": "Will return a 400 if the resulting stock would exceed the product's maximumQuantity."
+          }
+        },
+        {
+          "name": "5.6 Remove Stock",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/{{productId}}/stock/remove", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "{{productId}}", "stock", "remove"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "5.7 Delete a Product",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "{{productId}}"] }
+          }
+        },
+        {
+          "name": "5.8 Get Low Stock Products",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/spaces/{{spaceId}}/products/low-stock", "host": ["{{baseUrl}}"], "path": ["api", "spaces", "{{spaceId}}", "products", "low-stock"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Audit Logs",
+      "item": [
+        {
+          "name": "6.1 Get Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs?page=0&size=20&sortBy=timestamp&sortDirection=DESC",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs"],
+              "query": [
+                { "key": "entityType", "value": "", "disabled": true },
+                { "key": "operation", "value": "", "disabled": true },
+                { "key": "entityId", "value": "", "disabled": true },
+                { "key": "startDate", "value": "", "disabled": true },
+                { "key": "endDate", "value": "", "disabled": true },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sortBy", "value": "timestamp" },
+                { "key": "sortDirection", "value": "DESC" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.2 Get Audit Log Summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/audit-logs/summary", "host": ["{{baseUrl}}"], "path": ["api", "audit-logs", "summary"] }
+          }
+        },
+        {
+          "name": "6.3 Get Recent Activity",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/recent?hours=24",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "recent"],
+              "query": [{ "key": "hours", "value": "24" }]
+            }
+          }
+        },
+        {
+          "name": "6.4 Get Activity Trends",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-logs/trends?days=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "audit-logs", "trends"],
+              "query": [{ "key": "days", "value": "30" }]
+            }
+          }
+        },
+        {
+          "name": "6.5 Get Filter Options",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/audit-logs/filters", "host": ["{{baseUrl}}"], "path": ["api", "audit-logs", "filters"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Dashboard",
+      "item": [
+        {
+          "name": "7.1 Get Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard/overview", "host": ["{{baseUrl}}"], "path": ["api", "dashboard", "overview"] }
+          }
+        },
+        {
+          "name": "7.2 Get Inventory Insights",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard/insights", "host": ["{{baseUrl}}"], "path": ["api", "dashboard", "insights"] }
+          }
+        },
+        {
+          "name": "7.3 Get Low Stock Alerts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard/low-stock-alerts", "host": ["{{baseUrl}}"], "path": ["api", "dashboard", "low-stock-alerts"] }
+          }
+        },
+        {
+          "name": "7.4 Get Recent Activity Summary",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard/recent-activity", "host": ["{{baseUrl}}"], "path": ["api", "dashboard", "recent-activity"] }
+          }
+        },
+        {
+          "name": "7.5 Get Space Metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/dashboard/space-metrics", "host": ["{{baseUrl}}"], "path": ["api", "dashboard", "space-metrics"] }
+          }
+        },
+        {
+          "name": "7.6 Get Top Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/top-products?limit=5&sortBy=value",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "top-products"],
+              "query": [
+                { "key": "limit", "value": "5" },
+                { "key": "sortBy", "value": "value" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "7.7 Get Inventory Trends",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/trends?days=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard", "trends"],
+              "query": [{ "key": "days", "value": "30" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

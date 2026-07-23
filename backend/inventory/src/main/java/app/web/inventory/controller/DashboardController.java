@@ -1,16 +1,29 @@
 package app.web.inventory.controller;
 
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import app.web.inventory.config.SecurityUtil;
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.dashboard.DashboardOverviewDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto;
+import app.web.inventory.dto.dashboard.RecentActivityDto;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.SpaceDashboardDto;
+import app.web.inventory.dto.dashboard.TopProductsDto;
 import app.web.inventory.service.DashboardService;
+import app.web.inventory.util.SecurityUtil;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/api/dashboard")
+@Slf4j
 public class DashboardController {
 
     private final DashboardService dashboardService;
@@ -24,19 +37,26 @@ public class DashboardController {
      * GET /api/dashboard/overview
      */
     @GetMapping("/overview")
-    public ResponseEntity<?> getDashboardOverview() {
+    public ResponseEntity<ApiResponse<DashboardOverviewDto>> getDashboardOverview() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var overview = dashboardService.getDashboardOverview(currentUserId);
+            DashboardOverviewDto overview = dashboardService.getDashboardOverview(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", overview));
+            return ResponseEntity.ok(ApiResponse.success(overview));
 
         } catch (Exception ex) {
+            log.error("Error retrieving dashboard overview", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
+    }
+
+    @GetMapping("/spaces/{spaceId}")
+    public ResponseEntity<ApiResponse<SpaceDashboardDto>> getSpaceDashboard(
+            @org.springframework.web.bind.annotation.PathVariable UUID spaceId,
+            @RequestParam(defaultValue = "30") int days) {
+        UUID currentUserId = SecurityUtil.getCurrentUserId();
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getSpaceDashboard(currentUserId, spaceId, days)));
     }
 
     /**
@@ -44,18 +64,17 @@ public class DashboardController {
      * GET /api/dashboard/insights
      */
     @GetMapping("/insights")
-    public ResponseEntity<?> getInventoryInsights() {
+    public ResponseEntity<ApiResponse<InventoryInsightsDto>> getInventoryInsights() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var insights = dashboardService.getInventoryInsights(currentUserId);
+            InventoryInsightsDto insights = dashboardService.getInventoryInsights(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", insights));
+            return ResponseEntity.ok(ApiResponse.success(insights));
 
         } catch (Exception ex) {
+            log.error("Error retrieving inventory insights", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -64,18 +83,17 @@ public class DashboardController {
      * GET /api/dashboard/low-stock-alerts
      */
     @GetMapping("/low-stock-alerts")
-    public ResponseEntity<?> getLowStockAlerts() {
+    public ResponseEntity<ApiResponse<LowStockAlertsDto>> getLowStockAlerts() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var alerts = dashboardService.getLowStockAlerts(currentUserId);
+            LowStockAlertsDto alerts = dashboardService.getLowStockAlerts(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", alerts));
+            return ResponseEntity.ok(ApiResponse.success(alerts));
 
         } catch (Exception ex) {
+            log.error("Error retrieving low stock alerts", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -84,18 +102,17 @@ public class DashboardController {
      * GET /api/dashboard/recent-activity
      */
     @GetMapping("/recent-activity")
-    public ResponseEntity<?> getRecentActivity() {
+    public ResponseEntity<ApiResponse<RecentActivityDto>> getRecentActivity() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var activity = dashboardService.getRecentActivity(currentUserId);
+            RecentActivityDto activity = dashboardService.getRecentActivity(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", activity));
+            return ResponseEntity.ok(ApiResponse.success(activity));
 
         } catch (Exception ex) {
+            log.error("Error retrieving recent activity", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -104,18 +121,17 @@ public class DashboardController {
      * GET /api/dashboard/space-metrics
      */
     @GetMapping("/space-metrics")
-    public ResponseEntity<?> getSpaceMetrics() {
+    public ResponseEntity<ApiResponse<SpaceMetricsDto>> getSpaceMetrics() {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var metrics = dashboardService.getSpaceMetrics(currentUserId);
+            SpaceMetricsDto metrics = dashboardService.getSpaceMetrics(currentUserId);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", metrics));
+            return ResponseEntity.ok(ApiResponse.success(metrics));
 
         } catch (Exception ex) {
+            log.error("Error retrieving space metrics", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -124,20 +140,19 @@ public class DashboardController {
      * GET /api/dashboard/top-products
      */
     @GetMapping("/top-products")
-    public ResponseEntity<?> getTopProducts(
+    public ResponseEntity<ApiResponse<TopProductsDto>> getTopProducts(
             @RequestParam(defaultValue = "5") int limit,
             @RequestParam(defaultValue = "value") String sortBy) {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var topProducts = dashboardService.getTopProducts(currentUserId, limit, sortBy);
+            TopProductsDto topProducts = dashboardService.getTopProducts(currentUserId, limit, sortBy);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", topProducts));
+            return ResponseEntity.ok(ApiResponse.success(topProducts));
 
         } catch (Exception ex) {
+            log.error("Error retrieving top products", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 
@@ -146,20 +161,20 @@ public class DashboardController {
      * GET /api/dashboard/trends
      */
     @GetMapping("/trends")
-    public ResponseEntity<?> getInventoryTrends(
+    public ResponseEntity<ApiResponse<InventoryTrendsDto>> getInventoryTrends(
             @RequestParam(defaultValue = "30") int days) {
         try {
             UUID currentUserId = SecurityUtil.getCurrentUserId();
-            var trends = dashboardService.getInventoryTrends(currentUserId, days);
+            InventoryTrendsDto trends = dashboardService.getInventoryTrends(currentUserId, days);
 
-            return ResponseEntity.ok(Map.of(
-                    "success", true,
-                    "data", trends,
-                    "message", "Trend data based on last " + days + " days"));
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Trend data based on last " + days + " days",
+                    trends));
 
         } catch (Exception ex) {
+            log.error("Error retrieving inventory trends", ex);
             return ResponseEntity.status(500)
-                    .body(Map.of("success", false, "message", "Internal server error"));
+                    .body(ApiResponse.error("Internal server error"));
         }
     }
 }

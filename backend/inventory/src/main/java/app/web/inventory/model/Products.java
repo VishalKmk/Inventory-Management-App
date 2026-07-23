@@ -25,6 +25,15 @@ public class Products {
     @Column(nullable = false)
     private String name;
 
+    @Column(length = 100)
+    private String sku;
+
+    @Column(length = 100)
+    private String category;
+
+    @Column(length = 2048)
+    private String imageUrl;
+
     @Column(nullable = false)
     private Double price;
 

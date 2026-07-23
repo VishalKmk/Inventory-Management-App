@@ -1,22 +1,29 @@
 package app.web.inventory.service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
-import app.web.inventory.dto.ProductDto;
+import app.web.inventory.dto.product.ProductDto;
+import app.web.inventory.dto.product.ProductResponseDto;
+import app.web.inventory.exception.ResourceNotFoundException;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
+import app.web.inventory.model.enums.SpaceRole;
 import app.web.inventory.repository.ProductRepository;
-import jakarta.servlet.http.HttpServletRequest;
+import app.web.inventory.repository.SpaceMemberRepository;
+import app.web.inventory.util.RequestUtil;
 
 @Service
 @Transactional
@@ -25,29 +32,31 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final SpaceService spaceService;
     private final AuditLogService auditLogService;
+    private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-            AuditLogService auditLogService) {
+                          AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
+        this.spaceMemberRepository = spaceMemberRepository;
     }
 
     // =============================================================================
-    // HIERARCHICAL METHODS (Space -> Product operations)
+    // HIERARCHICAL METHODS (Space -> Product operations) - Return DTOs
     // =============================================================================
 
     /**
      * Create a new product in a specific space (hierarchical)
      */
-    public Products createProduct(UUID ownerId, UUID spaceId, String name, Double price,
-            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+    public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, String sku, String category,
+                                            String imageUrl, Double price,
+                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
-        // Verify user owns the space
-        Spaces space = spaceService.getSpaceByIdAndOwner(spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Space not found or access denied"));
+        checkWriteAccess(spaceId, userId);
 
-        // Validate input
+        Spaces space = spaceService.getSpaceById(spaceId);
+
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Product name is required");
         }
@@ -61,6 +70,9 @@ public class ProductService {
         Products product = new Products();
         product.setSpace(space);
         product.setName(name.trim());
+        product.setSku(normalizeOptional(sku));
+        product.setCategory(normalizeOptional(category));
+        product.setImageUrl(normalizeOptional(imageUrl));
         product.setPrice(price);
         product.setCurrentStock(currentStock);
         product.setMinimumQuantity(minimumQuantity);
@@ -78,53 +90,94 @@ public class ProductService {
                 "maximumQuantity", maximumQuantity != null ? maximumQuantity : 0,
                 "action", "Product created");
         auditLogService.logAction(
-                ownerId,
+                userId,
                 "PRODUCT",
                 savedProduct.getId(),
                 "CREATE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
-        return productRepository.save(product);
+        return convertToResponseDto(savedProduct);
+    }
+
+    // Get all accessible products for a user (owned + member spaces)
+    public List<Products> getAccessibleProducts(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+
+        // Get from owned spaces
+        List<Products> ownedProducts = productRepository.findByOwnerId(userId);
+
+        // Get from member spaces
+        List<Products> memberProducts = spaceMemberRepository
+                .findActiveSpacesByUserId(userId)
+                .stream()
+                .filter(sm -> !sm.getSpace().getOwner().getId().equals(userId))
+                .flatMap(sm -> productRepository.findBySpaceId(sm.getSpace().getId()).stream())
+                .collect(Collectors.toList());
+
+        List<Products> all = new ArrayList<>(ownedProducts);
+        all.addAll(memberProducts);
+        return all;
+    }
+
+    // Also fix getLowStockProducts
+    public List<Products> getAccessibleLowStockProducts(UUID userId) {
+        return getAccessibleProducts(userId).stream()
+                .filter(this::isLowStock)
+                .collect(Collectors.toList());
     }
 
     /**
      * Get a specific product by ID within a specific space (hierarchical)
      */
-    public Optional<Products> getProductByIdInSpace(UUID productId, UUID spaceId, UUID ownerId) {
-        // First verify space ownership
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
-        }
+    public ProductResponseDto getProductByIdInSpace(UUID productId, UUID spaceId, UUID ownerId) {
+        checkReadAccess(spaceId, ownerId);
 
-        // Find product and verify it belongs to the specified space
-        Optional<Products> productOpt = productRepository.findByIdAndOwnerId(productId, ownerId);
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId) // ← was userId
+                .filter(p -> p.getSpace().getId().equals(spaceId))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space"));
 
-        if (productOpt.isPresent() && !productOpt.get().getSpace().getId().equals(spaceId)) {
-            return Optional.empty(); // Product exists but not in the specified space
-        }
-
-        return productOpt;
+        return convertToResponseDto(product);
     }
 
     /**
      * Update product details in a specific space (hierarchical)
      */
-    public Products updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-            String name, Double price, Integer minimumQuantity, Integer maximumQuantity) {
+    public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
+                                                   String name, String sku, String category, String imageUrl,
+                                                   Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
-        Products product = getProductByIdInSpace(productId, spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+        checkWriteAccess(spaceId, ownerId);
 
-        // Track changes
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
+                .filter(p -> p.getSpace().getId().equals(spaceId))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
+
         Map<String, Object> changes = new HashMap<>();
         if (name != null && !name.trim().isEmpty() && !name.trim().equals(product.getName())) {
             changes.put("oldName", product.getName());
             changes.put("newName", name.trim());
             product.setName(name.trim());
+        }
+        if (sku != null && !Objects.equals(normalizeOptional(sku), product.getSku())) {
+            changes.put("oldSku", product.getSku());
+            changes.put("newSku", normalizeOptional(sku));
+            product.setSku(normalizeOptional(sku));
+        }
+        if (category != null && !Objects.equals(normalizeOptional(category), product.getCategory())) {
+            changes.put("oldCategory", product.getCategory());
+            changes.put("newCategory", normalizeOptional(category));
+            product.setCategory(normalizeOptional(category));
+        }
+        if (imageUrl != null && !Objects.equals(normalizeOptional(imageUrl), product.getImageUrl())) {
+            changes.put("oldImageUrl", product.getImageUrl());
+            changes.put("newImageUrl", normalizeOptional(imageUrl));
+            product.setImageUrl(normalizeOptional(imageUrl));
         }
         if (price != null && price >= 0 && !price.equals(product.getPrice())) {
             changes.put("oldPrice", product.getPrice());
@@ -142,9 +195,9 @@ public class ProductService {
             product.setMaximumQuantity(maximumQuantity);
         }
 
+        @SuppressWarnings("null")
         Products updatedProduct = productRepository.save(product);
 
-        // Log the update if there were changes
         if (!changes.isEmpty()) {
             changes.put("productName", product.getName());
             changes.put("spaceName", product.getSpace().getName());
@@ -156,31 +209,24 @@ public class ProductService {
                     productId,
                     "UPDATE",
                     changes,
-                    getClientIpAddress(),
-                    getUserAgent(),
+                    RequestUtil.getClientIpAddress(),
+                    RequestUtil.getUserAgent(),
                     spaceId,
                     "SPACE");
         }
 
-        return updatedProduct;
+        return convertToResponseDto(updatedProduct);
     }
 
     /**
-     * Adds stock to a product in a specific space.
-     *
-     * @param productId The unique identifier of the product to update
-     * @param spaceId   The unique identifier of the space where the product is
-     *                  located
-     * @param ownerId   The unique identifier of the user performing the operation
-     * @param quantity  The amount of stock to add (must be positive)
-     * @return The updated Products entity with the new stock quantity
-     * @throws IllegalArgumentException if the product is not found in the space, if
-     *                                  access is denied,
-     *                                  or if the quantity is null or not positive
+     * Add stock to a product in a specific space
      */
-    public Products addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
-        Products product = getProductByIdInSpace(productId, spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+    public ProductResponseDto addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
+        checkWriteAccess(spaceId, ownerId);
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
+                .filter(p -> p.getSpace().getId().equals(spaceId))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity to add must be positive");
@@ -188,10 +234,16 @@ public class ProductService {
 
         Integer oldStock = product.getCurrentStock();
         Integer newStock = oldStock + quantity;
+
+        if (product.getMaximumQuantity() != null && newStock > product.getMaximumQuantity()) {
+            throw new IllegalArgumentException(
+                    "Cannot exceed maximum quantity. Current: " + oldStock +
+                            ", Requested: " + quantity + ", Maximum: " + product.getMaximumQuantity());
+        }
+
         product.setCurrentStock(newStock);
         Products updatedProduct = productRepository.save(product);
 
-        // Log the stock addition
         Map<String, Object> details = Map.of(
                 "productName", product.getName(),
                 "spaceName", product.getSpace().getName(),
@@ -205,33 +257,23 @@ public class ProductService {
                 productId,
                 "STOCK_ADD",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
-        return updatedProduct;
+        return convertToResponseDto(updatedProduct);
     }
 
     /**
-     * Removes a specified quantity of stock from a product in a specific space.
-     *
-     * @param productId The UUID of the product to update
-     * @param spaceId   The UUID of the space where the product is located
-     * @param ownerId   The UUID of the user performing the operation
-     * @param quantity  The amount of stock to remove (must be positive)
-     * @return The updated Products entity with the new stock level
-     * @throws IllegalArgumentException if:
-     *                                  - The product is not found in the specified
-     *                                  space
-     *                                  - The user doesn't have access to the space
-     *                                  - The quantity is null or non-positive
-     *                                  - The requested quantity exceeds current
-     *                                  stock
+     * Remove stock from a product in a specific space
      */
-    public Products removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
-        Products product = getProductByIdInSpace(productId, spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+    public ProductResponseDto removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
+        checkWriteAccess(spaceId, ownerId);
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
+                .filter(p -> p.getSpace().getId().equals(spaceId))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         if (quantity == null || quantity <= 0) {
             throw new IllegalArgumentException("Quantity to remove must be positive");
@@ -247,7 +289,6 @@ public class ProductService {
         product.setCurrentStock(newStock);
         Products updatedProduct = productRepository.save(product);
 
-        // Log the stock removal
         Map<String, Object> details = Map.of(
                 "productName", product.getName(),
                 "spaceName", product.getSpace().getName(),
@@ -261,20 +302,26 @@ public class ProductService {
                 productId,
                 "STOCK_REMOVE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
 
-        return updatedProduct;
+        return convertToResponseDto(updatedProduct);
     }
 
     /**
      * Delete a product from a specific space (hierarchical)
      */
-    public boolean deleteProductInSpace(UUID productId, UUID spaceId, UUID ownerId) {
-        Products product = getProductByIdInSpace(productId, spaceId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found in this space or access denied"));
+    public void deleteProductInSpace(UUID productId, UUID spaceId, UUID ownerId) {
+        SpaceRole role = spaceService.getUserRoleInSpace(spaceId, ownerId); // ← was userId
+        if (role == SpaceRole.MEMBER || role == SpaceRole.VIEWER || role == SpaceRole.PENDING) {
+            throw new SecurityException("Only owners and admins can delete products");
+        }
+
+        Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId) // ← was userId
+                .filter(p -> p.getSpace().getId().equals(spaceId))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
         String productName = product.getName();
         String spaceName = product.getSpace().getName();
@@ -282,7 +329,6 @@ public class ProductService {
 
         productRepository.delete(product);
 
-        // Log the deletion
         Map<String, Object> details = Map.of(
                 "productName", productName,
                 "spaceName", spaceName,
@@ -295,22 +341,17 @@ public class ProductService {
                 productId,
                 "DELETE",
                 details,
-                getClientIpAddress(),
-                getUserAgent(),
+                RequestUtil.getClientIpAddress(),
+                RequestUtil.getUserAgent(),
                 spaceId,
                 "SPACE");
-
-        return true;
     }
 
     /**
      * Search products by name within a specific space (hierarchical)
      */
     public List<ProductDto> searchProductsByNameInSpace(UUID ownerId, UUID spaceId, String name) {
-        // Verify space ownership
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
-        }
+        checkReadAccess(spaceId, ownerId);
 
         List<Products> products;
         if (name == null || name.trim().isEmpty()) {
@@ -328,10 +369,7 @@ public class ProductService {
      * Get products with low stock in a specific space (hierarchical)
      */
     public List<ProductDto> getLowStockProductsInSpace(UUID ownerId, UUID spaceId) {
-        // Verify space ownership
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
-        }
+        checkReadAccess(spaceId, ownerId);
 
         return productRepository.findLowStockProductsBySpaceId(spaceId)
                 .stream()
@@ -340,245 +378,111 @@ public class ProductService {
     }
 
     // =============================================================================
-    // GLOBAL METHODS (All products across all spaces)
+    // GLOBAL METHODS - Return DTOs
     // =============================================================================
 
     /**
-     * Get all products owned by a user (across all their spaces)
+     * Get products by space with pagination
      */
+    public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
+                                               int page, int size, String sortBy, String sortDirection) {
+
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
+            throw new ResourceNotFoundException("Space not found or access denied");
+        }
+
+        // Fix: provide safe defaults before passing to Sort.by()
+        String safeSort = (sortBy != null && !sortBy.isBlank()) ? sortBy : "name";
+        String safeDirection = (sortDirection != null && !sortDirection.isBlank()) ? sortDirection : "ASC";
+
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.fromString(safeDirection), safeSort));
+
+        String searchParam = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        return productRepository
+                .findBySpaceIdAndUserHasAccessAndSearch(spaceId, userId, searchParam, pageable)
+                .map(this::convertToDto);
+    }
+
+    public List<Products> getProductsBySpace(UUID ownerId, UUID spaceId) {
+        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
+            throw new ResourceNotFoundException("Space not found or access denied");
+        }
+        return productRepository.findBySpaceId(spaceId);
+    }
+
     public List<Products> getProductsByOwner(UUID ownerId) {
         return productRepository.findByOwnerId(ownerId);
     }
 
-    /**
-     * Get all products owned by a user as DTOs (across all spaces)
-     */
-    public List<ProductDto> getProductsDtoByOwner(UUID ownerId) {
-        return productRepository.findByOwnerId(ownerId)
-                .stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get all products in a specific space as DTOs
-     */
-    public List<ProductDto> getProductsDtoBySpace(UUID ownerId, UUID spaceId) {
-        return getProductsBySpace(ownerId, spaceId)
-                .stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get all products in a specific space
-     */
-    public List<Products> getProductsBySpace(UUID ownerId, UUID spaceId) {
-        // Verify user owns the space
-        if (!spaceService.hasAccessToSpace(spaceId, ownerId)) {
-            throw new IllegalArgumentException("Space not found or access denied");
-        }
-
-        return productRepository.findBySpaceId(spaceId);
-    }
-
-    /**
-     * Get a product by ID, ensuring it belongs to the owner (global lookup)
-     */
-    public Optional<Products> getProductByIdAndOwner(UUID productId, UUID ownerId) {
-        return productRepository.findByIdAndOwnerId(productId, ownerId);
-    }
-
-    /**
-     * Search products by name across all spaces
-     */
-    public List<Products> searchProductsByName(UUID ownerId, String name) {
-        if (name == null || name.trim().isEmpty()) {
-            return getProductsByOwner(ownerId);
-        }
-        return productRepository.findByOwnerIdAndNameContainingIgnoreCase(ownerId, name.trim());
-    }
-
-    /**
-     * Search products by name as DTOs across all spaces
-     */
-    public List<ProductDto> searchProductsByNameDto(UUID ownerId, String name) {
-        return searchProductsByName(ownerId, name)
-                .stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get products with low stock across all spaces
-     */
     public List<Products> getLowStockProducts(UUID ownerId) {
         return productRepository.findLowStockProductsByOwnerId(ownerId);
-    }
-
-    /**
-     * Get products with low stock as DTOs across all spaces
-     */
-    public List<ProductDto> getLowStockProductsDto(UUID ownerId) {
-        return getLowStockProducts(ownerId)
-                .stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-    }
-
-    // =============================================================================
-    // LEGACY METHODS (for backward compatibility - can be removed later)
-    // =============================================================================
-
-    /**
-     * @deprecated Use updateProductInSpace instead
-     */
-    @Deprecated
-    public Products updateProduct(UUID productId, UUID ownerId, String name, Double price,
-            Integer minimumQuantity, Integer maximumQuantity) {
-
-        Products product = getProductByIdAndOwner(productId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied"));
-
-        if (name != null && !name.trim().isEmpty()) {
-            product.setName(name.trim());
-        }
-        if (price != null && price >= 0) {
-            product.setPrice(price);
-        }
-        if (minimumQuantity != null && minimumQuantity >= 0) {
-            product.setMinimumQuantity(minimumQuantity);
-        }
-        if (maximumQuantity != null && maximumQuantity >= 0) {
-            product.setMaximumQuantity(maximumQuantity);
-        }
-
-        return productRepository.save(product);
-    }
-
-    /**
-     * @deprecated Use updateStockInSpace instead
-     */
-    @Deprecated
-    public Products updateStock(UUID productId, UUID ownerId, Integer newStock) {
-        Products product = getProductByIdAndOwner(productId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied"));
-
-        if (newStock == null || newStock < 0) {
-            throw new IllegalArgumentException("Stock must be non-negative");
-        }
-
-        product.setCurrentStock(newStock);
-        return productRepository.save(product);
-    }
-
-    /**
-     * @deprecated Use addStockInSpace instead
-     */
-    @Deprecated
-    public Products addStock(UUID productId, UUID ownerId, Integer quantity) {
-        Products product = getProductByIdAndOwner(productId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied"));
-
-        if (quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("Quantity to add must be positive");
-        }
-
-        product.setCurrentStock(product.getCurrentStock() + quantity);
-        return productRepository.save(product);
-    }
-
-    /**
-     * @deprecated Use removeStockInSpace instead
-     */
-    @Deprecated
-    public Products removeStock(UUID productId, UUID ownerId, Integer quantity) {
-        Products product = getProductByIdAndOwner(productId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied"));
-
-        if (quantity == null || quantity <= 0) {
-            throw new IllegalArgumentException("Quantity to remove must be positive");
-        }
-
-        int newStock = product.getCurrentStock() - quantity;
-        if (newStock < 0) {
-            throw new IllegalArgumentException(
-                    "Insufficient stock. Current: " + product.getCurrentStock() + ", Requested: " + quantity);
-        }
-
-        product.setCurrentStock(newStock);
-        return productRepository.save(product);
-    }
-
-    /**
-     * @deprecated Use deleteProductInSpace instead
-     */
-    @Deprecated
-    public boolean deleteProduct(UUID productId, UUID ownerId) {
-        Products product = getProductByIdAndOwner(productId, ownerId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found or access denied"));
-
-        productRepository.delete(product);
-        return true;
     }
 
     // =============================================================================
     // UTILITY METHODS
     // =============================================================================
 
-    /**
-     * Check if product stock is low
-     */
+    private void checkWriteAccess(UUID spaceId, UUID userId) {
+        SpaceRole role = spaceService.getUserRoleInSpace(spaceId, userId);
+        // VIEWER can't write, PENDING can't do anything
+        if (role == SpaceRole.VIEWER || role == SpaceRole.PENDING) {
+            throw new SecurityException("Insufficient permissions to modify products");
+        }
+    }
+
+    private void checkReadAccess(UUID spaceId, UUID userId) {
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
+            throw new ResourceNotFoundException("Space not found or access denied");
+        }
+    }
+
     public boolean isLowStock(Products product) {
         return product.getMinimumQuantity() != null &&
                 product.getCurrentStock() != null &&
                 product.getCurrentStock() <= product.getMinimumQuantity();
     }
 
+    private String normalizeOptional(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
     /**
-     * Convert Product entity to DTO
+     * Convert Product entity to simple DTO (for lists)
      */
     private ProductDto convertToDto(Products product) {
         return new ProductDto(
                 product.getId(),
                 product.getSpace().getId(),
                 product.getName(),
+                product.getSku(),
+                product.getCategory(),
+                product.getImageUrl(),
                 product.getPrice(),
                 product.getCurrentStock(),
                 product.getMinimumQuantity(),
                 product.getMaximumQuantity());
     }
 
-    // Helper methods for request context
-    private String getClientIpAddress() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                String xForwardedFor = request.getHeader("X-Forwarded-For");
-                if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-                    return xForwardedFor.split(",")[0].trim();
-                }
-                return request.getRemoteAddr();
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
-    }
-
-    private String getUserAgent() {
-        try {
-            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
-                    .getRequestAttributes();
-            if (attributes != null) {
-                HttpServletRequest request = attributes.getRequest();
-                return request.getHeader("User-Agent");
-            }
-        } catch (Exception e) {
-            // Ignore and return null
-        }
-        return null;
+    /**
+     * Convert Product entity to full Response DTO (for single items)
+     */
+    private ProductResponseDto convertToResponseDto(Products product) {
+        return new ProductResponseDto(
+                product.getId(),
+                product.getSpace().getId(),
+                product.getSpace().getName(),
+                product.getName(),
+                product.getSku(),
+                product.getCategory(),
+                product.getImageUrl(),
+                product.getPrice(),
+                product.getCurrentStock(),
+                product.getMinimumQuantity(),
+                product.getMaximumQuantity(),
+                isLowStock(product),
+                product.getCreatedAt(),
+                product.getUpdatedAt());
     }
 }

@@ -1,0 +1,37 @@
+spring.datasource.url=
+spring.datasource.username=
+spring.datasource.password=
+
+# JPA / Hibernate
+spring.jpa.hibernate.ddl-auto=
+spring.jpa.show-sql=true
+
+# JWT
+app.jwt.secret=
+app.jwt.expiration-ms=
+
+# OTP
+app.otp.ttl-minutes=10
+
+# Pagination Defaults
+app.pagination.default-page=0
+app.pagination.default-size=20
+
+# Mail
+spring.mail.host=
+spring.mail.port=
+spring.mail.username=
+spring.mail.password=
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+
+# Logs
+logging.level.org.springframework.security=
+
+# OAuth
+spring.security.oauth2.client.registration.google.client-id=
+spring.security.oauth2.client.registration.google.client-secret=
+spring.security.oauth2.client.registration.google.scope=openid,email,profile
+
+# Where the frontend should land after successful login
+app.oauth2.frontend-redirect-uri=

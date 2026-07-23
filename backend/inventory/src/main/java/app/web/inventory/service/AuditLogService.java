@@ -1,7 +1,6 @@
 package app.web.inventory.service;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,9 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import app.web.inventory.dto.AuditLogDto;
-import app.web.inventory.dto.AuditLogFilterRequest;
-import app.web.inventory.dto.AuditLogSummaryDto;
+import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.audit.AuditLogFilterRequest;
+import app.web.inventory.dto.audit.AuditLogSummaryDto;
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
 import app.web.inventory.model.AuditLog;
 import app.web.inventory.repository.AuditLogRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -89,6 +89,7 @@ public class AuditLogService {
     /**
      * Get audit logs with filters and pagination
      */
+    @SuppressWarnings("null")
     public Page<AuditLogDto> getAuditLogs(UUID userId, AuditLogFilterRequest request) {
         Sort sort = Sort.by(Sort.Direction.fromString(request.getSortDirection()), request.getSortBy());
         Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
@@ -164,34 +165,80 @@ public class AuditLogService {
                 .collect(Collectors.toList());
     }
 
+    public Page<AuditLogDto> getSpaceAuditLogs(UUID spaceId, Pageable pageable) {
+        return auditLogRepository.findBySpaceId(spaceId, pageable).map(this::convertToDto);
+    }
+
+    public Page<AuditLogDto> getSpaceAuditLogs(UUID spaceId, AuditLogFilterRequest request) {
+        Sort sort = Sort.by(Sort.Direction.fromString(request.getSortDirection()), request.getSortBy());
+        Pageable pageable = PageRequest.of(request.getPage(), request.getSize(), sort);
+        String entityType = normalizeFilter(request.getEntityType());
+        String operation = normalizeFilter(request.getOperation());
+        return auditLogRepository.findBySpaceIdWithFilters(
+                spaceId, entityType, operation, request.getStartDate(), request.getEndDate(), pageable)
+                .map(this::convertToDto);
+    }
+
+    public List<AuditLogDto> getRecentActivityForSpace(UUID spaceId, int hours) {
+        return auditLogRepository.findRecentActivityBySpaceId(spaceId, LocalDateTime.now().minusHours(hours)).stream()
+                .limit(50)
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    public ActivityTrendsDto getSpaceActivityTrends(UUID spaceId, int days) {
+        LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime startDate = endDate.minusDays(days);
+        Map<String, Long> daily = auditLogRepository.countDailyActivityBySpaceId(spaceId, startDate, endDate).stream()
+                .collect(Collectors.toMap(row -> row[0].toString(), row -> (Long) row[1]));
+        Map<String, Long> operations = auditLogRepository.countOperationBreakdownBySpaceId(spaceId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
+        long total = daily.values().stream().mapToLong(Long::longValue).sum();
+        return new ActivityTrendsDto(daily, operations, total, days + " days");
+    }
+
     /**
      * Get activity trends for analytics
      */
-    public Map<String, Object> getActivityTrends(UUID userId, int days) {
-        LocalDateTime startDate = LocalDateTime.now().minusDays(days);
+    public ActivityTrendsDto getActivityTrends(UUID userId, int days) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        if (days <= 0 || days > 365) {
+            throw new IllegalArgumentException("Days must be between 1 and 365");
+        }
+
+        // Single timestamp reference - avoids microsecond drift
         LocalDateTime endDate = LocalDateTime.now();
+        LocalDateTime startDate = endDate.minusDays(days);
 
-        // For simplicity, get all logs in the period and group by day
-        Page<AuditLog> logs = auditLogRepository.findByUserIdAndTimestampBetweenOrderByTimestampDesc(
-                userId, startDate, endDate, Pageable.unpaged());
+        // All counting done in DB - no rows loaded into memory
+        @SuppressWarnings("null")
+        Map<String, Long> dailyActivity = auditLogRepository
+                .countDailyActivityByUser(userId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> row[0].toString(),
+                        row -> (Long) row[1]));
 
-        Map<String, Long> dailyActivity = logs.getContent().stream()
-                .collect(Collectors.groupingBy(
-                        log -> log.getTimestamp().toLocalDate().toString(),
-                        Collectors.counting()));
+        @SuppressWarnings("null")
+        Map<String, Long> operationBreakdown = auditLogRepository
+                .countOperationBreakdownByUser(userId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1]));
 
-        Map<String, Long> operationBreakdown = logs.getContent().stream()
-                .collect(Collectors.groupingBy(
-                        AuditLog::getOperation,
-                        Collectors.counting()));
+        @SuppressWarnings("null")
+        long totalActivities = auditLogRepository
+                .countByUserIdAndTimestampBetween(userId, startDate, endDate);
 
-        Map<String, Object> trends = new HashMap<>();
-        trends.put("dailyActivity", dailyActivity);
-        trends.put("operationBreakdown", operationBreakdown);
-        trends.put("totalActivities", logs.getTotalElements());
-        trends.put("period", days + " days");
-
-        return trends;
+        return new ActivityTrendsDto(
+                dailyActivity,
+                operationBreakdown,
+                totalActivities,
+                days + " days");
     }
 
     /**
@@ -208,5 +255,9 @@ public class AuditLogService {
                 auditLog.getIpAddress(),
                 auditLog.getRelatedEntityId(),
                 auditLog.getRelatedEntityType());
+    }
+
+    private String normalizeFilter(String value) {
+        return value == null || value.isBlank() ? null : value.trim().toUpperCase();
     }
 }

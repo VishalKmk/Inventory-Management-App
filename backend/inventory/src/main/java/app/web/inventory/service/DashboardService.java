@@ -1,463 +1,471 @@
 package app.web.inventory.service;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.DoubleSummaryStatistics;
+import java.util.HashMap;
+import java.util.IntSummaryStatistics;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import app.web.inventory.dto.AuditLogDto;
-import app.web.inventory.dto.SpaceDto;
+import app.web.inventory.dto.audit.AuditLogDto;
+import app.web.inventory.dto.dashboard.ActivityTrendsDto;
+import app.web.inventory.dto.dashboard.DashboardOverviewDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto.PriceAnalysisDto;
+import app.web.inventory.dto.dashboard.InventoryInsightsDto.StockAnalysisDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto;
+import app.web.inventory.dto.dashboard.InventoryTrendsDto.CurrentSnapshot;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto;
+import app.web.inventory.dto.dashboard.LowStockAlertsDto.AlertInfo;
+import app.web.inventory.dto.dashboard.RecentActivityDto;
+import app.web.inventory.dto.dashboard.RecentActivityDto.ActivityItem;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto;
+import app.web.inventory.dto.dashboard.SpaceDashboardDto;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto.SpaceMetric;
+import app.web.inventory.dto.dashboard.SpaceMetricsDto.SummaryDto;
+import app.web.inventory.dto.dashboard.TopProductsDto;
+import app.web.inventory.dto.dashboard.TopProductsDto.ProductSummary;
+import app.web.inventory.dto.space.SpaceDto;
 import app.web.inventory.model.Products;
 import app.web.inventory.model.Spaces;
 
 @Service
 public class DashboardService {
 
-        private final ProductService productService;
-        private final SpaceService spaceService;
-        private final AuditLogService auditLogService;
+    private final ProductService productService;
+    private final SpaceService spaceService;
+    private final AuditLogService auditLogService;
 
-        public DashboardService(ProductService productService, SpaceService spaceService,
-                        AuditLogService auditLogService) {
-                this.productService = productService;
-                this.spaceService = spaceService;
-                this.auditLogService = auditLogService;
+    public DashboardService(ProductService productService, SpaceService spaceService,
+            AuditLogService auditLogService) {
+        this.productService = productService;
+        this.spaceService = spaceService;
+        this.auditLogService = auditLogService;
+    }
+
+    /**
+     * Get comprehensive dashboard overview
+     */
+    public DashboardOverviewDto getDashboardOverview(UUID userId) {
+        // The main dashboard covers every space the user can access, including shared
+        // spaces.
+        List<Spaces> spaces = spaceService.getAccessibleSpaces(userId);
+        List<Products> products = productService.getAccessibleProducts(userId);
+        List<Products> lowStockProducts = productService.getAccessibleLowStockProducts(userId);
+
+        double totalValue = products.stream()
+                .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
+                .sum();
+
+        int maxSpaces = 10;
+        int usedSpaces = spaces.size();
+        double spaceUtilization = (usedSpaces / (double) maxSpaces) * 100;
+
+        Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
+
+        return new DashboardOverviewDto(
+                usedSpaces,
+                maxSpaces,
+                Math.round(spaceUtilization * 100.0) / 100.0,
+                products.size(),
+                Math.round(totalValue * 100.0) / 100.0,
+                lowStockProducts.size(),
+                stockStatus,
+                usedSpaces > 0
+                        ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0
+                        : 0.0);
+    }
+
+    public SpaceDashboardDto getSpaceDashboard(UUID userId, UUID spaceId, int days) {
+        if (!spaceService.hasAccessToSpace(spaceId, userId)) {
+            throw new app.web.inventory.exception.ResourceNotFoundException("Space not found or access denied");
         }
 
-        /**
-         * Get comprehensive dashboard overview
-         */
-        public Map<String, Object> getDashboardOverview(UUID userId) {
-                // Get basic counts
-                List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
-                List<Products> products = productService.getProductsByOwner(userId);
-                List<Products> lowStockProducts = productService.getLowStockProducts(userId);
+        Spaces space = spaceService.getSpaceById(spaceId);
 
-                // Calculate total inventory value
-                double totalValue = products.stream()
-                                .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
-                                .sum();
+        List<Products> products = productService.getProductsBySpace(userId, spaceId);
 
-                // Calculate space utilization
-                int maxSpaces = 10;
-                int usedSpaces = spaces.size();
-                double spaceUtilization = (usedSpaces / (double) maxSpaces) * 100;
+        List<Products> lowStock = products.stream().filter(productService::isLowStock).collect(Collectors.toList());
 
-                // Get stock status breakdown
-                Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
+        Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
 
-                Map<String, Object> overview = new HashMap<>();
-                overview.put("totalSpaces", usedSpaces);
-                overview.put("maxSpaces", maxSpaces);
-                overview.put("spaceUtilization", Math.round(spaceUtilization * 100.0) / 100.0);
-                overview.put("totalProducts", products.size());
-                overview.put("totalValue", Math.round(totalValue * 100.0) / 100.0);
-                overview.put("lowStockCount", lowStockProducts.size());
-                overview.put("stockStatus", stockStatus);
-                overview.put("averageProductsPerSpace",
-                                usedSpaces > 0 ? Math.round((products.size() / (double) usedSpaces) * 100.0) / 100.0
-                                                : 0);
+        double totalValue = products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum();
 
-                return overview;
+        DashboardOverviewDto overview = new DashboardOverviewDto(1, 1, 100.0, products.size(),
+                Math.round(totalValue * 100.0) / 100.0, lowStock.size(), stockStatus, (double) products.size());
+        List<TopProductsDto.ProductSummary> alerts = lowStock.stream().map(this::createProductSummary)
+                .collect(Collectors.toList());
+        List<AuditLogDto> recent = auditLogService.getRecentActivityForSpace(spaceId, 24 * 7);
+
+        ActivityTrendsDto trends = auditLogService.getSpaceActivityTrends(spaceId, days);
+
+        long memberCount = spaceService.getSpaceMembers(spaceId, userId, Pageable.unpaged()).getTotalElements();
+
+        return new SpaceDashboardDto(spaceId, space.getName(), spaceService.getUserRoleInSpace(spaceId, userId).name(),
+                memberCount,
+                overview, alerts, recent, trends);
+    }
+
+    /**
+     * Get detailed inventory insights
+     */
+    public InventoryInsightsDto getInventoryInsights(UUID userId) {
+        List<Products> products = productService.getAccessibleProducts(userId);
+
+        if (products.isEmpty()) {
+            return new InventoryInsightsDto(false, null, null, new HashMap<>(), new HashMap<>());
         }
 
-        /**
-         * Get detailed inventory insights
-         */
-        public Map<String, Object> getInventoryInsights(UUID userId) {
-                List<Products> products = productService.getProductsByOwner(userId);
+        // Price analysis
+        DoubleSummaryStatistics priceStats = products.stream()
+                .mapToDouble(Products::getPrice)
+                .summaryStatistics();
 
-                if (products.isEmpty()) {
-                        return Map.of(
-                                        "message", "No products found",
-                                        "hasData", false);
-                }
+        PriceAnalysisDto priceAnalysis = new PriceAnalysisDto(
+                Math.round(priceStats.getMin() * 100.0) / 100.0,
+                Math.round(priceStats.getMax() * 100.0) / 100.0,
+                Math.round(priceStats.getAverage() * 100.0) / 100.0);
 
-                // Price analysis
-                DoubleSummaryStatistics priceStats = products.stream()
-                                .mapToDouble(Products::getPrice)
-                                .summaryStatistics();
+        // Stock analysis
+        IntSummaryStatistics stockStats = products.stream()
+                .mapToInt(Products::getCurrentStock)
+                .summaryStatistics();
 
-                // Stock analysis
-                IntSummaryStatistics stockStats = products.stream()
-                                .mapToInt(Products::getCurrentStock)
-                                .summaryStatistics();
+        StockAnalysisDto stockAnalysis = new StockAnalysisDto(
+                stockStats.getMin(),
+                stockStats.getMax(),
+                Math.round(stockStats.getAverage() * 100.0) / 100.0,
+                stockStats.getSum());
 
-                // Value distribution by space
-                Map<String, Double> valueBySpace = products.stream()
-                                .collect(Collectors.groupingBy(
-                                                p -> p.getSpace().getName(),
-                                                Collectors.summingDouble(p -> p.getPrice() * p.getCurrentStock())));
+        // Value distribution by space
+        Map<String, Double> valueBySpace = products.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSpace().getName(),
+                        Collectors.summingDouble(p -> p.getPrice() * p.getCurrentStock())))
+                .entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> Math.round(e.getValue() * 100.0) / 100.0));
 
-                // Product count by space
-                Map<String, Long> countBySpace = products.stream()
-                                .collect(Collectors.groupingBy(
-                                                p -> p.getSpace().getName(),
-                                                Collectors.counting()));
+        // Product count by space
+        Map<String, Long> countBySpace = products.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSpace().getName(),
+                        Collectors.counting()));
 
-                Map<String, Object> insights = new HashMap<>();
-                insights.put("hasData", true);
-                insights.put("priceAnalysis", Map.of(
-                                "minimum", Math.round(priceStats.getMin() * 100.0) / 100.0,
-                                "maximum", Math.round(priceStats.getMax() * 100.0) / 100.0,
-                                "average", Math.round(priceStats.getAverage() * 100.0) / 100.0));
-                insights.put("stockAnalysis", Map.of(
-                                "minimum", stockStats.getMin(),
-                                "maximum", stockStats.getMax(),
-                                "average", Math.round(stockStats.getAverage() * 100.0) / 100.0,
-                                "total", stockStats.getSum()));
-                insights.put("valueBySpace", valueBySpace.entrySet().stream()
-                                .collect(Collectors.toMap(
-                                                Map.Entry::getKey,
-                                                e -> Math.round(e.getValue() * 100.0) / 100.0)));
-                insights.put("productCountBySpace", countBySpace);
+        return new InventoryInsightsDto(true, priceAnalysis, stockAnalysis, valueBySpace, countBySpace);
+    }
 
-                return insights;
-        }
+    /**
+     * Get low stock alerts with detailed information
+     */
+    public LowStockAlertsDto getLowStockAlerts(UUID userId) {
+        List<Products> lowStockProducts = productService.getAccessibleLowStockProducts(userId);
 
-        /**
-         * Get low stock alerts with detailed information
-         */
-        public Map<String, Object> getLowStockAlerts(UUID userId) {
-                List<Products> lowStockProducts = productService.getLowStockProducts(userId);
+        // Group by space for better organization
+        Map<String, List<AlertInfo>> alertsBySpace = lowStockProducts.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSpace().getName(),
+                        Collectors.mapping(this::createAlertInfo, Collectors.toList())));
 
-                // Group by space for better organization
-                Map<String, List<Map<String, Object>>> alertsBySpace = lowStockProducts.stream()
-                                .collect(Collectors.groupingBy(
-                                                p -> p.getSpace().getName(),
-                                                Collectors.mapping(this::createAlertInfo, Collectors.toList())));
+        // Calculate severity levels
+        Map<String, Long> severityLevels = lowStockProducts.stream()
+                .collect(Collectors.groupingBy(
+                        this::getStockSeverity,
+                        Collectors.counting()));
 
-                // Calculate severity levels
-                Map<String, Long> severityLevels = lowStockProducts.stream()
-                                .collect(Collectors.groupingBy(
-                                                this::getStockSeverity,
-                                                Collectors.counting()));
+        return new LowStockAlertsDto(
+                lowStockProducts.size(),
+                alertsBySpace,
+                severityLevels,
+                !lowStockProducts.isEmpty());
+    }
 
-                Map<String, Object> alerts = new HashMap<>();
-                alerts.put("totalAlerts", lowStockProducts.size());
-                alerts.put("alertsBySpace", alertsBySpace);
-                alerts.put("severityBreakdown", severityLevels);
-                alerts.put("hasAlerts", !lowStockProducts.isEmpty());
+    /**
+     * Get recent activity using audit logs
+     */
+    @SuppressWarnings("unchecked")
+    public RecentActivityDto getRecentActivity(UUID userId) {
+        List<AuditLogDto> recentLogs = auditLogService.getRecentActivity(userId, 168); // Last 7 days
 
-                return alerts;
-        }
+        List<ActivityItem> activities = recentLogs.stream()
+                .map((AuditLogDto log) -> {
+                    Map<String, Object> details = new HashMap<>();
+                    String description;
 
-        /**
-         * Get recent activity (limited without audit logs)
-         */
-        /**
-         * Get recent activity using audit logs instead of creation dates
-         */
-        @SuppressWarnings("unchecked")
-        public Map<String, Object> getRecentActivity(UUID userId) {
-                List<AuditLogDto> recentLogs = auditLogService.getRecentActivity(userId, 168); // Last 7 days
-
-                List<Map<String, Object>> activities = recentLogs.stream()
-                                .map(log -> {
-                                        Map<String, Object> activity = new HashMap<>();
-                                        activity.put("id", log.getId());
-                                        activity.put("type", log.getOperation().toLowerCase());
-                                        activity.put("entityType", log.getEntityType().toLowerCase());
-                                        activity.put("entityId", log.getEntityId());
-                                        activity.put("timestamp", log.getTimestamp());
-                                        activity.put("ipAddress", log.getIpAddress());
-
-                                        // Parse details for display
-                                        if (log.getDetails() != null) {
-                                                try {
-                                                        ObjectMapper mapper = new ObjectMapper();
-                                                        Map<String, Object> details = mapper.readValue(log.getDetails(),
-                                                                        Map.class);
-                                                        activity.put("details", details);
-
-                                                        // Add readable description
-                                                        String description = generateActivityDescription(
-                                                                        log.getOperation(), log.getEntityType(),
-                                                                        details);
-                                                        activity.put("description", description);
-
-                                                } catch (Exception e) {
-                                                        activity.put("description",
-                                                                        log.getOperation() + " " + log.getEntityType());
-                                                }
-                                        } else {
-                                                activity.put("description",
-                                                                log.getOperation() + " " + log.getEntityType());
-                                        }
-
-                                        return activity;
-                                })
-                                .collect(Collectors.toList());
-
-                Map<String, Object> recentActivity = new HashMap<>();
-                recentActivity.put("activities", activities);
-                recentActivity.put("totalCount", activities.size());
-                recentActivity.put("hasActivity", !activities.isEmpty());
-                recentActivity.put("message", "Recent activities from audit logs");
-
-                return recentActivity;
-        }
-
-        /**
-         * Get space performance metrics
-         */
-        public Map<String, Object> getSpaceMetrics(UUID userId) {
-                List<SpaceDto> spacesWithCounts = spaceService.getSpacesWithProductCount(userId);
-
-                if (spacesWithCounts.isEmpty()) {
-                        return Map.of(
-                                        "message", "No spaces found",
-                                        "hasData", false);
-                }
-
-                // Calculate space efficiency metrics
-                List<Map<String, Object>> spaceMetrics = spacesWithCounts.stream()
-                                .map(space -> {
-                                        // Get products for this space to calculate value
-                                        List<Products> spaceProducts = productService.getProductsBySpace(userId,
-                                                        space.getId());
-                                        double totalValue = spaceProducts.stream()
-                                                        .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
-                                                        .sum();
-
-                                        long lowStockCount = spaceProducts.stream()
-                                                        .mapToLong(p -> productService.isLowStock(p) ? 1 : 0)
-                                                        .sum();
-
-                                        Map<String, Object> metric = new HashMap<>();
-                                        metric.put("spaceId", space.getId());
-                                        metric.put("spaceName", space.getName());
-                                        metric.put("productCount", space.getProductCount());
-                                        metric.put("totalValue", Math.round(totalValue * 100.0) / 100.0);
-                                        metric.put("lowStockCount", lowStockCount);
-                                        metric.put("healthScore", calculateSpaceHealthScore(spaceProducts));
-                                        return metric;
-                                })
-                                .sorted((a, b) -> Double.compare((Double) b.get("totalValue"),
-                                                (Double) a.get("totalValue")))
-                                .collect(Collectors.toList());
-
-                // Summary statistics
-                double totalValue = spaceMetrics.stream()
-                                .mapToDouble(m -> (Double) m.get("totalValue"))
-                                .sum();
-
-                long totalProducts = spaceMetrics.stream()
-                                .mapToLong(m -> (Long) m.get("productCount"))
-                                .sum();
-
-                Map<String, Object> metrics = new HashMap<>();
-                metrics.put("hasData", true);
-                metrics.put("spaceMetrics", spaceMetrics);
-                metrics.put("summary", Map.of(
-                                "totalSpaces", spacesWithCounts.size(),
-                                "totalValue", Math.round(totalValue * 100.0) / 100.0,
-                                "totalProducts", totalProducts,
-                                "averageValuePerSpace",
-                                spacesWithCounts.size() > 0
-                                                ? Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0
-                                                : 0));
-
-                return metrics;
-        }
-
-        /**
-         * Get top products by various criteria
-         */
-        public Map<String, Object> getTopProducts(UUID userId, int limit, String sortBy) {
-                List<Products> products = productService.getProductsByOwner(userId);
-
-                if (products.isEmpty()) {
-                        return Map.of(
-                                        "message", "No products found",
-                                        "hasData", false);
-                }
-
-                List<Map<String, Object>> topProducts;
-
-                switch (sortBy.toLowerCase()) {
-                        case "stock":
-                                topProducts = products.stream()
-                                                .sorted((a, b) -> Integer.compare(b.getCurrentStock(),
-                                                                a.getCurrentStock()))
-                                                .limit(limit)
-                                                .map(this::createProductSummary)
-                                                .collect(Collectors.toList());
-                                break;
-                        case "price":
-                                topProducts = products.stream()
-                                                .sorted((a, b) -> Double.compare(b.getPrice(), a.getPrice()))
-                                                .limit(limit)
-                                                .map(this::createProductSummary)
-                                                .collect(Collectors.toList());
-                                break;
-                        case "value":
-                        default:
-                                topProducts = products.stream()
-                                                .sorted((a, b) -> Double.compare(
-                                                                b.getPrice() * b.getCurrentStock(),
-                                                                a.getPrice() * a.getCurrentStock()))
-                                                .limit(limit)
-                                                .map(this::createProductSummary)
-                                                .collect(Collectors.toList());
-                                break;
-                }
-
-                Map<String, Object> result = new HashMap<>();
-                result.put("hasData", true);
-                result.put("topProducts", topProducts);
-                result.put("sortedBy", sortBy);
-                result.put("limit", limit);
-
-                return result;
-        }
-
-        /**
-         * Get basic inventory trends (without full audit system)
-         */
-        public Map<String, Object> getInventoryTrends(UUID userId, int days) {
-                List<Products> products = productService.getProductsByOwner(userId);
-                List<Spaces> spaces = spaceService.getSpacesByOwner(userId);
-
-                // Since we don't have historical data, provide current snapshot analysis
-                Map<String, Object> currentSnapshot = Map.of(
-                                "date", new Date(),
-                                "totalProducts", products.size(),
-                                "totalSpaces", spaces.size(),
-                                "totalValue", Math.round(products.stream()
-                                                .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
-                                                .sum() * 100.0) / 100.0,
-                                "lowStockCount", productService.getLowStockProducts(userId).size());
-
-                Map<String, Object> trends = new HashMap<>();
-                trends.put("hasHistoricalData", false);
-                trends.put("currentSnapshot", currentSnapshot);
-                trends.put("message", "Historical trend data requires audit logging system. Showing current state.");
-                trends.put("requestedDays", days);
-
-                return trends;
-        }
-
-        // Helper methods
-
-        private Map<String, Integer> getStockStatusBreakdown(List<Products> products) {
-                Map<String, Integer> status = new HashMap<>();
-                status.put("inStock", 0);
-                status.put("lowStock", 0);
-                status.put("outOfStock", 0);
-
-                for (Products product : products) {
-                        if (product.getCurrentStock() == 0) {
-                                status.put("outOfStock", status.get("outOfStock") + 1);
-                        } else if (productService.isLowStock(product)) {
-                                status.put("lowStock", status.get("lowStock") + 1);
-                        } else {
-                                status.put("inStock", status.get("inStock") + 1);
+                    // Parse details for display
+                    if (log.getDetails() != null) {
+                        try {
+                            ObjectMapper mapper = new ObjectMapper();
+                            details = mapper.readValue(log.getDetails(), Map.class);
+                            description = generateActivityDescription(log.getOperation(), log.getEntityType(), details);
+                        } catch (JsonProcessingException e) {
+                            description = log.getOperation() + " " + log.getEntityType();
                         }
-                }
+                    } else {
+                        description = log.getOperation() + " " + log.getEntityType();
+                    }
 
-                return status;
+                    return new ActivityItem(
+                            log.getId(),
+                            log.getOperation().toLowerCase(),
+                            log.getEntityType().toLowerCase(),
+                            log.getEntityId(),
+                            log.getTimestamp(),
+                            log.getIpAddress(),
+                            details,
+                            description);
+                })
+                .collect(Collectors.toList());
+
+        return new RecentActivityDto(
+                activities,
+                activities.size(),
+                !activities.isEmpty(),
+                "Recent activities from audit logs");
+    }
+
+    /**
+     * Get space performance metrics
+     */
+    public SpaceMetricsDto getSpaceMetrics(UUID userId) {
+        List<SpaceDto> spacesWithCounts = new ArrayList<>();
+        spacesWithCounts.addAll(spaceService.getOwnedSpacesWithProductCount(userId));
+        spacesWithCounts.addAll(spaceService.getSharedSpacesWithProductCount(userId));
+
+        if (spacesWithCounts.isEmpty()) {
+            return new SpaceMetricsDto(false, new ArrayList<>(), null);
         }
 
-        private Map<String, Object> createAlertInfo(Products product) {
-                Map<String, Object> alert = new HashMap<>();
-                alert.put("productId", product.getId());
-                alert.put("productName", product.getName());
-                alert.put("spaceName", product.getSpace().getName());
-                alert.put("currentStock", product.getCurrentStock());
-                alert.put("minimumQuantity", product.getMinimumQuantity());
-                alert.put("severity", getStockSeverity(product));
-                alert.put("stockDifference",
-                                product.getMinimumQuantity() != null
-                                                ? product.getMinimumQuantity() - product.getCurrentStock()
-                                                : 0);
-                return alert;
+        // Load ALL accessible products in ONE query instead of one per space
+        List<Products> allProducts = productService.getAccessibleProducts(userId);
+
+        // Group by space ID in memory - no more per-space queries
+        Map<UUID, List<Products>> productsBySpace = allProducts.stream()
+                .collect(Collectors.groupingBy(p -> p.getSpace().getId()));
+
+        List<SpaceMetric> spaceMetrics = spacesWithCounts.stream()
+                .map(space -> {
+                    // Just a map lookup - no DB call
+                    List<Products> spaceProducts = productsBySpace
+                            .getOrDefault(space.getId(), new ArrayList<>());
+
+                    double totalValue = spaceProducts.stream()
+                            .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
+                            .sum();
+
+                    long lowStockCount = spaceProducts.stream()
+                            .filter(productService::isLowStock)
+                            .count();
+
+                    return new SpaceMetric(
+                            space.getId(),
+                            space.getName(),
+                            space.getProductCount(),
+                            Math.round(totalValue * 100.0) / 100.0,
+                            lowStockCount,
+                            calculateSpaceHealthScore(spaceProducts));
+                })
+                .sorted((a, b) -> Double.compare(b.getTotalValue(), a.getTotalValue()))
+                .collect(Collectors.toList());
+
+        double totalValue = spaceMetrics.stream()
+                .mapToDouble(SpaceMetric::getTotalValue)
+                .sum();
+
+        long totalProducts = spaceMetrics.stream()
+                .mapToLong(SpaceMetric::getProductCount)
+                .sum();
+
+        SummaryDto summary = new SummaryDto(
+                spacesWithCounts.size(),
+                Math.round(totalValue * 100.0) / 100.0,
+                totalProducts,
+                Math.round((totalValue / spacesWithCounts.size()) * 100.0) / 100.0);
+
+        return new SpaceMetricsDto(true, spaceMetrics, summary);
+    }
+
+    /**
+     * Get top products by various criteria
+     */
+    public TopProductsDto getTopProducts(UUID userId, int limit, String sortBy) {
+        List<Products> products = productService.getAccessibleProducts(userId);
+
+        if (products.isEmpty()) {
+            return new TopProductsDto(false, new ArrayList<>(), sortBy, limit);
         }
 
-        private String getStockSeverity(Products product) {
-                if (product.getCurrentStock() == 0) {
-                        return "critical";
-                }
-                if (product.getMinimumQuantity() != null) {
-                        double ratio = (double) product.getCurrentStock() / product.getMinimumQuantity();
-                        if (ratio <= 0.5) {
-                                return "high";
-                        } else if (ratio <= 0.8) {
-                                return "medium";
-                        }
-                }
-                return "low";
+        List<ProductSummary> topProducts;
+
+        switch (sortBy.toLowerCase()) {
+            case "stock":
+                topProducts = products.stream()
+                        .sorted((a, b) -> Integer.compare(b.getCurrentStock(), a.getCurrentStock()))
+                        .limit(limit)
+                        .map(this::createProductSummary)
+                        .collect(Collectors.toList());
+                break;
+            case "price":
+                topProducts = products.stream()
+                        .sorted((a, b) -> Double.compare(b.getPrice(), a.getPrice()))
+                        .limit(limit)
+                        .map(this::createProductSummary)
+                        .collect(Collectors.toList());
+                break;
+            case "value":
+            default:
+                topProducts = products.stream()
+                        .sorted((a, b) -> Double.compare(
+                                b.getPrice() * b.getCurrentStock(),
+                                a.getPrice() * a.getCurrentStock()))
+                        .limit(limit)
+                        .map(this::createProductSummary)
+                        .collect(Collectors.toList());
+                break;
         }
 
-        private double calculateSpaceHealthScore(List<Products> products) {
-                if (products.isEmpty()) {
-                        return 100.0;
-                }
+        return new TopProductsDto(true, topProducts, sortBy, limit);
+    }
 
-                long totalProducts = products.size();
-                long lowStockProducts = products.stream()
-                                .mapToLong(p -> productService.isLowStock(p) ? 1 : 0)
-                                .sum();
-                long outOfStockProducts = products.stream()
-                                .mapToLong(p -> p.getCurrentStock() == 0 ? 1 : 0)
-                                .sum();
+    /**
+     * Get inventory trends
+     */
+    public InventoryTrendsDto getInventoryTrends(UUID userId, int days) {
+        List<Products> products = productService.getAccessibleProducts(userId);
+        List<Spaces> spaces = spaceService.getAccessibleSpaces(userId);
 
-                // Health score: 100 - (lowStock penalty + outOfStock penalty)
-                double lowStockPenalty = (lowStockProducts / (double) totalProducts) * 30;
-                double outOfStockPenalty = (outOfStockProducts / (double) totalProducts) * 50;
+        // Build snapshot once - used in both branches
+        CurrentSnapshot snapshot = new CurrentSnapshot(
+                new Date(),
+                products.size(),
+                spaces.size(),
+                Math.round(products.stream()
+                        .mapToDouble(p -> p.getPrice() * p.getCurrentStock())
+                        .sum() * 100.0) / 100.0,
+                productService.getAccessibleLowStockProducts(userId).size());
 
-                return Math.max(0, Math.round((100 - lowStockPenalty - outOfStockPenalty) * 100.0) / 100.0);
+        // Get trends from audit logs
+        ActivityTrendsDto trendsData = auditLogService.getActivityTrends(userId, days);
+
+        return new InventoryTrendsDto(
+                true,
+                snapshot,
+                trendsData.getDailyActivity(),
+                trendsData.getOperationBreakdown(),
+                trendsData.getTotalActivities(),
+                trendsData.getPeriod(),
+                "Showing inventory trends for the last " + days + " days",
+                days);
+    }
+
+    // Helper methods
+
+    private Map<String, Integer> getStockStatusBreakdown(List<Products> products) {
+        Map<String, Integer> status = new HashMap<>();
+        status.put("inStock", 0);
+        status.put("lowStock", 0);
+        status.put("outOfStock", 0);
+
+        for (Products product : products) {
+            if (product.getCurrentStock() == 0) {
+                status.put("outOfStock", status.get("outOfStock") + 1);
+            } else if (productService.isLowStock(product)) {
+                status.put("lowStock", status.get("lowStock") + 1);
+            } else {
+                status.put("inStock", status.get("inStock") + 1);
+            }
         }
 
-        private Map<String, Object> createProductSummary(Products product) {
-                Map<String, Object> summary = new HashMap<>();
-                summary.put("productId", product.getId());
-                summary.put("name", product.getName());
-                summary.put("spaceName", product.getSpace().getName());
-                summary.put("price", product.getPrice());
-                summary.put("currentStock", product.getCurrentStock());
-                summary.put("totalValue", Math.round(product.getPrice() * product.getCurrentStock() * 100.0) / 100.0);
-                summary.put("isLowStock", productService.isLowStock(product));
-                return summary;
+        return status;
+    }
+
+    private AlertInfo createAlertInfo(Products product) {
+        return new AlertInfo(
+                product.getId(),
+                product.getName(),
+                product.getSpace().getName(),
+                product.getCurrentStock(),
+                product.getMinimumQuantity(),
+                getStockSeverity(product),
+                product.getMinimumQuantity() != null ? product.getMinimumQuantity() - product.getCurrentStock() : 0);
+    }
+
+    private String getStockSeverity(Products product) {
+        if (product.getCurrentStock() == 0) {
+            return "critical";
+        }
+        if (product.getMinimumQuantity() != null) {
+            double ratio = (double) product.getCurrentStock() / product.getMinimumQuantity();
+            if (ratio <= 0.5) {
+                return "high";
+            } else if (ratio <= 0.8) {
+                return "medium";
+            }
+        }
+        return "low";
+    }
+
+    private double calculateSpaceHealthScore(List<Products> products) {
+        if (products.isEmpty()) {
+            return 100.0;
         }
 
-        private String generateActivityDescription(String operation, String entityType, Map<String, Object> details) {
-                switch (operation + "_" + entityType) {
-                        case "CREATE_SPACE":
-                                return "Created space: " + details.get("spaceName");
-                        case "UPDATE_SPACE":
-                                return "Renamed space from '" + details.get("oldName") + "' to '"
-                                                + details.get("newName") + "'";
-                        case "DELETE_SPACE":
-                                return "Deleted space: " + details.get("spaceName");
-                        case "CREATE_PRODUCT":
-                                return "Created product '" + details.get("productName") + "' in space '"
-                                                + details.get("spaceName") + "'";
-                        case "UPDATE_PRODUCT":
-                                return "Updated product: " + details.get("productName");
-                        case "DELETE_PRODUCT":
-                                return "Deleted product '" + details.get("productName") + "' from space '"
-                                                + details.get("spaceName") + "'";
-                        case "STOCK_ADD":
-                                return "Added " + details.get("quantityAdded") + " units to '"
-                                                + details.get("productName") + "'";
-                        case "STOCK_REMOVE":
-                                return "Removed " + details.get("quantityRemoved") + " units from '"
-                                                + details.get("productName") + "'";
-                        case "STOCK_UPDATE":
-                                return "Updated stock for '" + details.get("productName") + "' from " +
-                                                details.get("oldStock") + " to " + details.get("newStock");
-                        default:
-                                return operation + " " + entityType;
-                }
-        }
+        long totalProducts = products.size();
+        long lowStockProducts = products.stream()
+                .filter(productService::isLowStock)
+                .count();
+        long outOfStockProducts = products.stream()
+                .filter(p -> p.getCurrentStock() == 0)
+                .count();
 
-        /**
-         * Get activity trends using audit logs
-         */
-        public Map<String, Object> getActivityTrends(UUID userId, int days) {
-                return auditLogService.getActivityTrends(userId, days);
-        }
+        // Health score: 100 - (lowStock penalty + outOfStock penalty)
+        double lowStockPenalty = (lowStockProducts / (double) totalProducts) * 30;
+        double outOfStockPenalty = (outOfStockProducts / (double) totalProducts) * 50;
+
+        return Math.max(0, Math.round((100 - lowStockPenalty - outOfStockPenalty) * 100.0) / 100.0);
+    }
+
+    private ProductSummary createProductSummary(Products product) {
+        return new ProductSummary(
+                product.getId(),
+                product.getName(),
+                product.getSpace().getName(),
+                product.getPrice(),
+                product.getCurrentStock(),
+                Math.round(product.getPrice() * product.getCurrentStock() * 100.0) / 100.0,
+                productService.isLowStock(product));
+    }
+
+    private String generateActivityDescription(String operation, String entityType, Map<String, Object> details) {
+        return switch (operation + "_" + entityType) {
+            case "CREATE_SPACE" -> "Created space: " + details.get("spaceName");
+            case "UPDATE_SPACE" ->
+                "Renamed space from '" + details.get("oldName") + "' to '" + details.get("newName") + "'";
+            case "DELETE_SPACE" -> "Deleted space: " + details.get("spaceName");
+            case "CREATE_PRODUCT" ->
+                "Created product '" + details.get("productName") + "' in space '" + details.get("spaceName")
+                        + "'";
+            case "UPDATE_PRODUCT" -> "Updated product: " + details.get("productName");
+            case "DELETE_PRODUCT" ->
+                "Deleted product '" + details.get("productName") + "' from space '" + details.get("spaceName")
+                        + "'";
+            case "STOCK_ADD" ->
+                "Added " + details.get("quantityAdded") + " units to '" + details.get("productName") + "'";
+            case "STOCK_REMOVE" ->
+                "Removed " + details.get("quantityRemoved") + " units from '" + details.get("productName") + "'";
+            case "STOCK_UPDATE" -> "Updated stock for '" + details.get("productName") + "' from " +
+                    details.get("oldStock") + " to " + details.get("newStock");
+            default -> operation + " " + entityType;
+        };
+    }
 }

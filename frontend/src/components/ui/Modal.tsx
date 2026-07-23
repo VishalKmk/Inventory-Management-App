@@ -1,74 +1,69 @@
+'use client';
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
   title: string;
+  subtitle?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  maxWidth?: string;
 }
 
-const Modal: React.FC<ModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  children, 
-  size = 'md' 
-}) => {
-  const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl'
-  };
-
+export default function Modal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+  maxWidth = 'max-w-lg',
+}: ModalProps) {
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
+    if (open) document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center">
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-          onClick={onClose}
-        />
-        
-        <div className={`relative w-full ${sizeClasses[size]} transform overflow-hidden rounded-2xl bg-white dark:bg-slate-800 text-left shadow-xl transition-all`}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-700">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <div
+        className={`relative bg-card rounded-xl shadow-modal w-full ${maxWidth} fade-in`}
+      >
+        <div className="flex items-start justify-between p-6 border-b border-border">
+          <div>
+            <h2 id="modal-title" className="text-lg font-semibold text-foreground">
               {title}
-            </h3>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              <X size={20} className="text-gray-500 dark:text-slate-400" />
-            </button>
+            </h2>
+            {subtitle && (
+              <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+            )}
           </div>
-          
-          <div className="p-6">
-            {children}
-          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors ml-4 flex-shrink-0"
+            aria-label="Close modal"
+          >
+            <X size={16} className="text-muted-foreground" />
+          </button>
         </div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );
-};
-
-export default Modal;
+}

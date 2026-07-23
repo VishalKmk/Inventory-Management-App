@@ -1,18 +1,31 @@
-
 package app.web.inventory.controller;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
-import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import app.web.inventory.config.SecurityUtil;
-import app.web.inventory.dto.*;
-import app.web.inventory.model.Products;
+import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.pagination.PaginationDto;
+import app.web.inventory.dto.product.CreateProductRequest;
+import app.web.inventory.dto.product.ProductDto;
+import app.web.inventory.dto.product.ProductListDto;
+import app.web.inventory.dto.product.ProductResponseDto;
+import app.web.inventory.dto.product.UpdateProductRequest;
+import app.web.inventory.dto.stock.StockOperationRequest;
 import app.web.inventory.service.ProductService;
+import app.web.inventory.util.SecurityUtil;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/spaces/{spaceId}/products")
@@ -29,33 +42,26 @@ public class ProductController {
          * POST /api/spaces/{spaceId}/products
          */
         @PostMapping
-        public ResponseEntity<?> createProduct(
+        public ResponseEntity<ApiResponse<ProductResponseDto>> createProduct(
                         @PathVariable UUID spaceId,
                         @Valid @RequestBody CreateProductRequest request) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
 
-                Products product = productService.createProduct(
+                ProductResponseDto product = productService.createProduct(
                                 currentUserId,
-                                spaceId, // Use path variable instead of request body
+                                spaceId,
                                 request.getName(),
+                                request.getSku(),
+                                request.getCategory(),
+                                request.getImageUrl(),
                                 request.getPrice(),
                                 request.getCurrentStock(),
                                 request.getMinimumQuantity(),
                                 request.getMaximumQuantity());
 
-                return ResponseEntity.status(201).body(Map.of(
-                                "success", true,
-                                "message", "Product created successfully",
-                                "data", Map.of(
-                                                "id", product.getId(),
-                                                "spaceId", product.getSpace().getId(),
-                                                "spaceName", product.getSpace().getName(),
-                                                "name", product.getName(),
-                                                "price", product.getPrice(),
-                                                "currentStock", product.getCurrentStock(),
-                                                "minimumQuantity", product.getMinimumQuantity(),
-                                                "maximumQuantity", product.getMaximumQuantity(),
-                                                "createdAt", product.getCreatedAt())));
+                return ResponseEntity.status(201)
+                                .body(ApiResponse.success("Product created successfully", product));
         }
 
         /**
@@ -63,18 +69,30 @@ public class ProductController {
          * GET /api/spaces/{spaceId}/products
          */
         @GetMapping
-        public ResponseEntity<?> getProductsBySpace(
+        public ResponseEntity<ApiResponse<ProductListDto>> getProductsBySpace(
                         @PathVariable UUID spaceId,
-                        @RequestParam(required = false) String search) {
+                        @RequestParam(required = false) String search,
+                        @RequestParam(defaultValue = "${app.pagination.default-page}") int page,
+                        @RequestParam(defaultValue = "${app.pagination.default-size}") int size,
+                        @RequestParam(defaultValue = "name") String sortBy,
+                        @RequestParam(defaultValue = "ASC") String sortDirection) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
 
-                var products = search != null && !search.trim().isEmpty()
-                                ? productService.searchProductsByNameInSpace(currentUserId, spaceId, search)
-                                : productService.getProductsDtoBySpace(currentUserId, spaceId);
+                Page<ProductDto> productsPage = productService.getProductsBySpace(
+                                currentUserId, spaceId, search, page, size, sortBy, sortDirection);
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "data", products));
+                PaginationDto pagination = new PaginationDto(
+                                productsPage.getNumber(),
+                                productsPage.getSize(),
+                                productsPage.getTotalElements(),
+                                productsPage.getTotalPages(),
+                                productsPage.hasNext(),
+                                productsPage.hasPrevious());
+
+                ProductListDto response = new ProductListDto(productsPage.getContent(), pagination);
+
+                return ResponseEntity.ok(ApiResponse.success(response));
         }
 
         /**
@@ -82,35 +100,14 @@ public class ProductController {
          * GET /api/spaces/{spaceId}/products/{productId}
          */
         @GetMapping("/{productId}")
-        public ResponseEntity<?> getProduct(
+        public ResponseEntity<ApiResponse<ProductResponseDto>> getProduct(
                         @PathVariable UUID spaceId,
                         @PathVariable UUID productId) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
+                ProductResponseDto product = productService.getProductByIdInSpace(productId, spaceId, currentUserId);
 
-                var productOpt = productService.getProductByIdInSpace(productId, spaceId, currentUserId);
-
-                if (productOpt.isEmpty()) {
-                        return ResponseEntity.status(404)
-                                        .body(Map.of("success", false, "message", "Product not found in this space"));
-                }
-
-                Products product = productOpt.get();
-                var productData = new HashMap<String, Object>();
-                productData.put("id", product.getId());
-                productData.put("spaceId", product.getSpace().getId());
-                productData.put("spaceName", product.getSpace().getName());
-                productData.put("name", product.getName());
-                productData.put("price", product.getPrice());
-                productData.put("currentStock", product.getCurrentStock());
-                productData.put("minimumQuantity", product.getMinimumQuantity());
-                productData.put("maximumQuantity", product.getMaximumQuantity());
-                productData.put("isLowStock", productService.isLowStock(product));
-                productData.put("createdAt", product.getCreatedAt());
-                productData.put("updatedAt", product.getUpdatedAt());
-
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "data", productData));
+                return ResponseEntity.ok(ApiResponse.success(product));
         }
 
         /**
@@ -118,31 +115,26 @@ public class ProductController {
          * PUT /api/spaces/{spaceId}/products/{productId}
          */
         @PutMapping("/{productId}")
-        public ResponseEntity<?> updateProduct(
+        public ResponseEntity<ApiResponse<ProductResponseDto>> updateProduct(
                         @PathVariable UUID spaceId,
                         @PathVariable UUID productId,
                         @Valid @RequestBody UpdateProductRequest request) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
 
-                Products updatedProduct = productService.updateProductInSpace(
+                ProductResponseDto updatedProduct = productService.updateProductInSpace(
                                 productId,
                                 spaceId,
                                 currentUserId,
-                                request.getName(),
-                                request.getPrice(),
+                        request.getName(),
+                        request.getSku(),
+                        request.getCategory(),
+                        request.getImageUrl(),
+                        request.getPrice(),
                                 request.getMinimumQuantity(),
                                 request.getMaximumQuantity());
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Product updated successfully",
-                                "data", Map.of(
-                                                "id", updatedProduct.getId(),
-                                                "name", updatedProduct.getName(),
-                                                "price", updatedProduct.getPrice(),
-                                                "minimumQuantity", updatedProduct.getMinimumQuantity(),
-                                                "maximumQuantity", updatedProduct.getMaximumQuantity(),
-                                                "updatedAt", updatedProduct.getUpdatedAt())));
+                return ResponseEntity.ok(ApiResponse.success("Product updated successfully", updatedProduct));
         }
 
         /**
@@ -150,26 +142,20 @@ public class ProductController {
          * POST /api/spaces/{spaceId}/products/{productId}/stock/add
          */
         @PostMapping("/{productId}/stock/add")
-        public ResponseEntity<?> addStock(
+        public ResponseEntity<ApiResponse<ProductResponseDto>> addStock(
                         @PathVariable UUID spaceId,
                         @PathVariable UUID productId,
                         @Valid @RequestBody StockOperationRequest request) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
 
-                Products updatedProduct = productService.addStockInSpace(
+                ProductResponseDto updatedProduct = productService.addStockInSpace(
                                 productId,
                                 spaceId,
                                 currentUserId,
                                 request.getQuantity());
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Stock added successfully",
-                                "data", Map.of(
-                                                "id", updatedProduct.getId(),
-                                                "currentStock", updatedProduct.getCurrentStock(),
-                                                "quantityAdded", request.getQuantity(),
-                                                "updatedAt", updatedProduct.getUpdatedAt())));
+                return ResponseEntity.ok(ApiResponse.success("Stock added successfully", updatedProduct));
         }
 
         /**
@@ -177,27 +163,20 @@ public class ProductController {
          * POST /api/spaces/{spaceId}/products/{productId}/stock/remove
          */
         @PostMapping("/{productId}/stock/remove")
-        public ResponseEntity<?> removeStock(
+        public ResponseEntity<ApiResponse<ProductResponseDto>> removeStock(
                         @PathVariable UUID spaceId,
                         @PathVariable UUID productId,
                         @Valid @RequestBody StockOperationRequest request) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
 
-                Products updatedProduct = productService.removeStockInSpace(
+                ProductResponseDto updatedProduct = productService.removeStockInSpace(
                                 productId,
                                 spaceId,
                                 currentUserId,
                                 request.getQuantity());
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Stock removed successfully",
-                                "data", Map.of(
-                                                "id", updatedProduct.getId(),
-                                                "currentStock", updatedProduct.getCurrentStock(),
-                                                "quantityRemoved", request.getQuantity(),
-                                                "isLowStock", productService.isLowStock(updatedProduct),
-                                                "updatedAt", updatedProduct.getUpdatedAt())));
+                return ResponseEntity.ok(ApiResponse.success("Stock removed successfully", updatedProduct));
         }
 
         /**
@@ -205,15 +184,14 @@ public class ProductController {
          * DELETE /api/spaces/{spaceId}/products/{productId}
          */
         @DeleteMapping("/{productId}")
-        public ResponseEntity<?> deleteProduct(
+        public ResponseEntity<ApiResponse<Void>> deleteProduct(
                         @PathVariable UUID spaceId,
                         @PathVariable UUID productId) {
+
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
                 productService.deleteProductInSpace(productId, spaceId, currentUserId);
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Product deleted successfully"));
+                return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
         }
 
         /**
@@ -221,13 +199,14 @@ public class ProductController {
          * GET /api/spaces/{spaceId}/products/low-stock
          */
         @GetMapping("/low-stock")
-        public ResponseEntity<?> getLowStockProducts(@PathVariable UUID spaceId) {
+        public ResponseEntity<ApiResponse<List<ProductDto>>> getLowStockProducts(@PathVariable UUID spaceId) {
                 UUID currentUserId = SecurityUtil.getCurrentUserId();
-                var products = productService.getLowStockProductsInSpace(currentUserId, spaceId);
+                List<ProductDto> products = productService.getLowStockProductsInSpace(currentUserId, spaceId);
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Found " + products.size() + " products with low stock",
-                                "data", products));
+                String message = !products.isEmpty()
+                                ? "Found " + products.size() + " products with low stock"
+                                : "No low stock products found";
+
+                return ResponseEntity.ok(ApiResponse.success(message, products));
         }
 }

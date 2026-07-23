@@ -32,6 +32,7 @@ public interface SpaceRepository extends JpaRepository<Spaces, UUID> {
     long countProductsInSpace(@Param("spaceId") UUID spaceId);
 
     // Get spaces with product counts
+    // SpaceRepository.java - keep both queries
     @Query("SELECT s, COUNT(p) FROM Spaces s LEFT JOIN Products p ON s.id = p.space.id WHERE s.owner.id = :ownerId GROUP BY s")
     List<Object[]> findSpacesWithProductCount(@Param("ownerId") UUID ownerId);
 }
