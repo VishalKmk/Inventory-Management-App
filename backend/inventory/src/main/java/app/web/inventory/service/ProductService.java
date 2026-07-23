@@ -35,23 +35,19 @@ public class ProductService {
     private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-                          AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
+            AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
         this.spaceMemberRepository = spaceMemberRepository;
     }
 
-    // =============================================================================
-    // HIERARCHICAL METHODS (Space -> Product operations) - Return DTOs
-    // =============================================================================
-
     /**
-     * Create a new product in a specific space (hierarchical)
+     * Create a new product in a specific space.
      */
     public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, String sku, String category,
-                                            String imageUrl, Double price,
-                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+            String imageUrl, Double price,
+            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, userId);
 
@@ -125,7 +121,6 @@ public class ProductService {
         return all;
     }
 
-    // Also fix getLowStockProducts
     public List<Products> getAccessibleLowStockProducts(UUID userId) {
         return getAccessibleProducts(userId).stream()
                 .filter(this::isLowStock)
@@ -133,7 +128,7 @@ public class ProductService {
     }
 
     /**
-     * Get a specific product by ID within a specific space (hierarchical)
+     * Get a specific product by ID within a specific space.
      */
     public ProductResponseDto getProductByIdInSpace(UUID productId, UUID spaceId, UUID ownerId) {
         checkReadAccess(spaceId, ownerId);
@@ -146,11 +141,11 @@ public class ProductService {
     }
 
     /**
-     * Update product details in a specific space (hierarchical)
+     * Update product details in a specific space.
      */
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-                                                   String name, String sku, String category, String imageUrl,
-                                                   Double price, Integer minimumQuantity, Integer maximumQuantity) {
+            String name, String sku, String category, String imageUrl,
+            Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, ownerId);
 
@@ -219,7 +214,7 @@ public class ProductService {
     }
 
     /**
-     * Add stock to a product in a specific space
+     * Add stock to a product in a specific space.
      */
     public ProductResponseDto addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
         checkWriteAccess(spaceId, ownerId);
@@ -266,7 +261,7 @@ public class ProductService {
     }
 
     /**
-     * Remove stock from a product in a specific space
+     * Remove stock from a product in a specific space.
      */
     public ProductResponseDto removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
         checkWriteAccess(spaceId, ownerId);
@@ -311,7 +306,7 @@ public class ProductService {
     }
 
     /**
-     * Delete a product from a specific space (hierarchical)
+     * Delete a product from a specific space.
      */
     public void deleteProductInSpace(UUID productId, UUID spaceId, UUID ownerId) {
         SpaceRole role = spaceService.getUserRoleInSpace(spaceId, ownerId); // ← was userId
@@ -348,7 +343,7 @@ public class ProductService {
     }
 
     /**
-     * Search products by name within a specific space (hierarchical)
+     * Search products by name within a specific space.
      */
     public List<ProductDto> searchProductsByNameInSpace(UUID ownerId, UUID spaceId, String name) {
         checkReadAccess(spaceId, ownerId);
@@ -366,7 +361,7 @@ public class ProductService {
     }
 
     /**
-     * Get products with low stock in a specific space (hierarchical)
+     * Get products with low stock in a specific space.
      */
     public List<ProductDto> getLowStockProductsInSpace(UUID ownerId, UUID spaceId) {
         checkReadAccess(spaceId, ownerId);
@@ -377,15 +372,11 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
-    // =============================================================================
-    // GLOBAL METHODS - Return DTOs
-    // =============================================================================
-
     /**
-     * Get products by space with pagination
+     * Get products by space with pagination.
      */
     public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
-                                               int page, int size, String sortBy, String sortDirection) {
+            int page, int size, String sortBy, String sortDirection) {
 
         if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new ResourceNotFoundException("Space not found or access denied");
@@ -419,10 +410,6 @@ public class ProductService {
     public List<Products> getLowStockProducts(UUID ownerId) {
         return productRepository.findLowStockProductsByOwnerId(ownerId);
     }
-
-    // =============================================================================
-    // UTILITY METHODS
-    // =============================================================================
 
     private void checkWriteAccess(UUID spaceId, UUID userId) {
         SpaceRole role = spaceService.getUserRoleInSpace(spaceId, userId);
