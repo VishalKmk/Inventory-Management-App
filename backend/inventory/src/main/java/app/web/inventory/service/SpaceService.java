@@ -44,8 +44,8 @@ public class SpaceService {
     private final EmailService emailService;
 
     public SpaceService(SpaceRepository spaceRepository, UserService userService, AuditLogService auditLogService,
-                        app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository,
-                        ProductRepository productRepository, EmailService emailService) {
+            app.web.inventory.repository.SpaceMemberRepository spaceMemberRepository,
+            ProductRepository productRepository, EmailService emailService) {
         this.spaceRepository = spaceRepository;
         this.userService = userService;
         this.auditLogService = auditLogService;
@@ -55,7 +55,7 @@ public class SpaceService {
     }
 
     /**
-     * Create a new space for the given user (max 10 spaces per user)
+     * Create a new space for the given user.
      */
     public SpaceResponseDto createSpace(UUID ownerId, String name) {
         Users owner = userService.findById(ownerId)
@@ -122,7 +122,7 @@ public class SpaceService {
     }
 
     /**
-     * Update space name
+     * Update the space name.
      */
     public SpaceResponseDto updateSpace(UUID spaceId, UUID userId, String newName) {
         Spaces space = getSpaceByIdAndUser(spaceId, userId)
@@ -166,7 +166,7 @@ public class SpaceService {
     }
 
     /**
-     * Delete a space (only if it has no products)
+     * Delete a space.
      */
     public void deleteSpace(UUID spaceId, UUID userId) {
         if (spaceId == null || userId == null) {
@@ -227,7 +227,7 @@ public class SpaceService {
     }
 
     /**
-     * Get a specific space by ID as DTO
+     * Get a specific space by ID as a DTO.
      */
     public SpaceResponseDto getSpaceByIdDto(UUID spaceId, UUID userId) {
         Spaces space = getSpaceByIdAndUser(spaceId, userId)
