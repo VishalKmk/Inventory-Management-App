@@ -33,10 +33,9 @@ nbdist/
 .nb-gradle/
 
 # Environment configuration
-src/main/resources/application.properties
-
 *.env
 .env*
+backend/inventory/src/main/resources/application.properties
 
 # Logs
 logs/
