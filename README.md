@@ -202,7 +202,7 @@ npm run type-check
 
 ---
 
-## AI-Assisted Development
+## 🤖 AI-Assisted Development
 
 This project was developed with AI assistance as a productivity tool for tasks such as brainstorming, debugging, documentation, refactoring suggestions, and implementation guidance.
 
