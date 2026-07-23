@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -55,7 +56,8 @@ public class DashboardService {
      * Get comprehensive dashboard overview
      */
     public DashboardOverviewDto getDashboardOverview(UUID userId) {
-        // The main dashboard covers every space the user can access, including shared spaces.
+        // The main dashboard covers every space the user can access, including shared
+        // spaces.
         List<Spaces> spaces = spaceService.getAccessibleSpaces(userId);
         List<Products> products = productService.getAccessibleProducts(userId);
         List<Products> lowStockProducts = productService.getAccessibleLowStockProducts(userId);
@@ -87,18 +89,29 @@ public class DashboardService {
         if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new app.web.inventory.exception.ResourceNotFoundException("Space not found or access denied");
         }
+
         Spaces space = spaceService.getSpaceById(spaceId);
+
         List<Products> products = productService.getProductsBySpace(userId, spaceId);
+
         List<Products> lowStock = products.stream().filter(productService::isLowStock).collect(Collectors.toList());
+
         Map<String, Integer> stockStatus = getStockStatusBreakdown(products);
+
         double totalValue = products.stream().mapToDouble(p -> p.getPrice() * p.getCurrentStock()).sum();
+
         DashboardOverviewDto overview = new DashboardOverviewDto(1, 1, 100.0, products.size(),
                 Math.round(totalValue * 100.0) / 100.0, lowStock.size(), stockStatus, (double) products.size());
-        List<TopProductsDto.ProductSummary> alerts = lowStock.stream().map(this::createProductSummary).collect(Collectors.toList());
+        List<TopProductsDto.ProductSummary> alerts = lowStock.stream().map(this::createProductSummary)
+                .collect(Collectors.toList());
         List<AuditLogDto> recent = auditLogService.getRecentActivityForSpace(spaceId, 24 * 7);
+
         ActivityTrendsDto trends = auditLogService.getSpaceActivityTrends(spaceId, days);
-        long memberCount = spaceService.getSpaceMembers(spaceId, userId, org.springframework.data.domain.Pageable.unpaged()).getTotalElements();
-        return new SpaceDashboardDto(spaceId, space.getName(), spaceService.getUserRoleInSpace(spaceId, userId).name(), memberCount,
+
+        long memberCount = spaceService.getSpaceMembers(spaceId, userId, Pageable.unpaged()).getTotalElements();
+
+        return new SpaceDashboardDto(spaceId, space.getName(), spaceService.getUserRoleInSpace(spaceId, userId).name(),
+                memberCount,
                 overview, alerts, recent, trends);
     }
 

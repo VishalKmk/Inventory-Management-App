@@ -1,13 +1,10 @@
-# Inventory Management System (IMS)
+﻿# Inventory Management App
 
-![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-F2F4F9?style=for-the-badge&logo=spring-boot)
-![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
-![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=JSON%20web%20tokens&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-005C84?style=for-the-badge&logo=mysql&logoColor=white)
+A full-stack inventory management application with a React/Next.js frontend and a Spring Boot backend.
 
-A modern, full-stack inventory management application built with React and Spring Boot. Manage your inventory across different spaces and locations with an intuitive, hierarchical organization system.
+This repo contains:
+- `frontend/` — Next.js app for inventory dashboard, authentication, products, and spaces
+- `backend/inventory/` — Spring Boot REST API with JWT auth, Google OAuth, email OTP, and MySQL persistence
 
 ---
 
@@ -16,353 +13,195 @@ A modern, full-stack inventory management application built with React and Sprin
 - [Features](#-features)
 - [Technology Stack](#-technology-stack)
 - [Architecture](#-architecture)
-- [Screenshots](#-screenshots)
 - [Installation](#-installation)
-- [Usage](#-usage)
-- [API Documentation](#-api-documentation)
+- [Running the App](#-running-the-app)
+- [Configuration](#-configuration)
 - [Project Structure](#-project-structure)
-- [Contributing](#-contributing)
+- [API Documentation](#-api-documentation)
+- [Testing](#-testing)
+- [Notes](#-notes)
 - [License](#-license)
-- [Contact](#-contact)
 
 ---
 
 ## ✨ Features
 
-### 🏠 Space Management
-- **Multi-Space Organization**: Create and manage up to 10 different spaces (Electronics, Home Appliances, Toys, etc.)
-- **Space Overview**: View all spaces with product counts and quick access
-- **Hierarchical Structure**: User → Spaces → Products for logical organization
-
-### 📦 Product Management
-- **Product CRUD Operations**: Add, edit, view, and delete products within spaces
-- **Smart Stock Control**: Set minimum and maximum quantity thresholds
-- **Real-time Stock Updates**: Add/remove stock with instant feedback
-- **Product Search**: Search products within specific spaces
-- **Low Stock Detection**: Automatic identification of products below minimum thresholds
-
-### 📊 Analytics Dashboard
-- **Comprehensive Overview**: Total spaces, products, inventory value, and low stock alerts
-- **Visual Charts**: Inventory value by space and product distribution pie charts
-- **Price Analysis**: Minimum, maximum, and average price insights
-- **Stock Analytics**: Total stock levels and low stock severity breakdown
-
-### 🔐 Authentication & Security
-- **Secure Registration**: Email-based registration with OTP verification
-- **JWT Authentication**: Secure token-based authentication system
-- **Account Management**: User profile management and session control
-
-### 📈 Monitoring & Insights
-- **Real-time Alerts**: Low stock notifications with severity levels
-- **Inventory Trends**: Historical data and trend analysis
-- **Audit Logging**: Complete activity tracking for all operations
-- **Recent Activity**: Dashboard showing recent inventory changes
+- Space-based inventory organization
+- Product CRUD with stock and threshold validation
+- Low stock alerts and dashboard insights
+- JWT authentication and Google OAuth
+- Email OTP verification for signup
+- Audit history and activity tracking
 
 ---
 
 ## 🛠️ Technology Stack
 
-### Frontend
-- **React 18** with Vite for fast development
-- **Modern JavaScript (ES6+)**
-- **Responsive Design** with CSS modules
-- **Component-based Architecture**
-
-### Backend
-- **Java 17** with Spring Boot 3.x
-- **Spring Security** with JWT authentication
-- **Spring Data JPA** with Hibernate
-- **RESTful API** design
-- **Bean Validation** for input validation
-
-### Database
-- **Relational Database** (H2/MySQL/PostgreSQL compatible)
-- **JPA/Hibernate** ORM mapping
-- **Database migrations** support
-
-### Additional Features
-- **Email Integration** for OTP verification
-- **Audit Logging** system
-- **CORS Configuration** for cross-origin requests
-- **Exception Handling** with custom error responses
+- Frontend: **Next.js 15**, **React 19**, **TypeScript**, **Tailwind CSS**
+- Backend: **Java 17**, **Spring Boot 3.5**, **Spring Security**, **Spring Data JPA**
+- Database: **MySQL** (JDBC), compatible with other relational databases
+- API docs: **Springdoc OpenAPI**
 
 ---
 
 ## 🏗️ Architecture
 
-```
-User (1) ──→ Space (Many) ──→ Product (Many)
-```
+The repository is split into two main layers:
 
-- **User**: Authenticated users can manage their inventory
-- **Space**: Logical containers (max 10 per user) for organizing products
-- **Product**: Individual items with stock levels, pricing, and thresholds
+- `frontend/` — client application, pages, components, authentication flows, and dashboard UI
+- `backend/inventory/` — Spring Boot REST API, security, persistence, email, and OAuth
 
----
-
-## 📸 Screenshots
-
-### Dashboard Overview
-![Dashboard](assets/dashboard.png)
-
-*Main dashboard showing key metrics and recent activity*
-
-### Spaces Management
-![Spaces](assets/spaces.png)
-
-*Organize inventory across different spaces and locations*
-
-### Product Management
-![Products](assets/electronics.png)
-
-![Products](assets/toys.png)
-
-*Detailed product management with stock control*
-
-### Analytics & Insights
-![Analytics](assets/analytics.png)
-
-*Comprehensive analytics with charts and insights*
-
-### Authentication
-![Auth](assets/register.png)
-
-![Auth](assets/signin.png)
-
-*Secure login and registration system*
+The frontend communicates with the backend via REST API calls, and the backend persists data into the configured database.
 
 ---
 
 ## 🚀 Installation
 
 ### Prerequisites
-- **Java 17** or higher
-- **Node.js 16+** and npm
-- **Maven 3.6+**
-- **Git**
 
-### Steps
+- Java 17 or newer
+- Maven 3.6+ (or use the included Maven wrapper)
+- Node.js 18+ and npm
+- MySQL or compatible relational database
 
-#### 1. Clone the repository
+### 1. Clone repository
+
 ```bash
-git clone https://github.com/VishalKmk/Inventory-Management-App.git
+git clone <repo-url>
 cd Inventory-Management-App
 ```
 
-#### 2. Backend Setup
+### 2. Backend setup
+
 ```bash
 cd backend/inventory
-
-# Configure database in application.properties
-# Set email configuration for OTP functionality
-
-# Install dependencies and run
-mvn clean install
-mvn spring-boot:run
 ```
 
-**Backend will start on** `http://localhost:8080`
+Windows:
 
-#### 3. Frontend Setup
+```powershell
+./mvnw.cmd clean package
+./mvnw.cmd spring-boot:run
+```
+
+macOS/Linux:
+
 ```bash
-cd frontend
+./mvnw clean package
+./mvnw spring-boot:run
+```
 
-# Install dependencies
+### 3. Frontend setup
+
+```bash
+cd ../../frontend
 npm install
-
-# Run build command
-npm run build
-
-# Start development server
 npm run dev
 ```
 
-**Frontend will start on** `http://localhost:5173`
+---
 
-#### 4. Environment Configuration
+## ▶️ Running the App
+
+- Backend: `http://localhost:8080`
+- Frontend: `http://localhost:4028`
+
+> The frontend development server is configured to run on port `4028`.
+
+---
+
+## ⚙️ Configuration
+
+Backend configuration is in `backend/inventory/src/main/resources/application.properties`.
+
+Required configuration values:
+
+- `spring.datasource.url`
+- `spring.datasource.username`
+- `spring.datasource.password`
+- `app.jwt.secret`
+- `spring.mail.host`
+- `spring.mail.port`
+- `spring.mail.username`
+- `spring.mail.password`
+- `spring.security.oauth2.client.registration.google.client-id`
+- `spring.security.oauth2.client.registration.google.client-secret`
+- `app.oauth2.frontend-redirect-uri`
+
+### Example backend config
+
 ```properties
-# Backend application.properties
-server.port=8080
-spring.datasource.url=jdbc:h2:mem:testdb
-spring.mail.host=your-smtp-host
-spring.mail.username=your-email
-spring.mail.password=your-password
+spring.datasource.url=jdbc:mysql://localhost:3306/inventory?useSSL=false&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=your-db-password
+
+app.jwt.secret=change-this-to-a-secure-random-value
+
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=your-email@example.com
+spring.mail.password=your-email-password
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+
+spring.security.oauth2.client.registration.google.client-id=YOUR_GOOGLE_CLIENT_ID
+spring.security.oauth2.client.registration.google.client-secret=YOUR_GOOGLE_CLIENT_SECRET
+app.oauth2.frontend-redirect-uri=http://localhost:4028/oauth/callback
 ```
 
----
-
-## 📖 Usage
-
-### Getting Started
-
-#### 1. Create Account
-- Visit `http://localhost:5173`
-- Register with your email
-- Verify email with OTP code
-- Login to access dashboard
-
-#### 2. Create Your First Space
-- Click "Create Space" or "Add Space"
-- Name your space (e.g., "Electronics", "Kitchen")
-- Start adding products to the space
-
-#### 3. Add Products
-- Navigate to a space
-- Click "Add Product"
-- Fill in product details:
-  - Name and price
-  - Current stock quantity
-  - Minimum and maximum thresholds
-
-#### 4. Manage Inventory
-- Use "Add" and "Remove" buttons for stock adjustments
-- Monitor low stock alerts in the dashboard
-- View analytics for insights
-
-### Key Workflows
-
-- **Stock Management**: Space → Select Product → Add/Remove Stock
-- **Monitoring**: Dashboard → View Alerts → Take Action
-- **Analysis**: Analytics → Review Charts → Make Decisions
-
----
-
-## 📚 API Documentation
-
-### Base URL
-```
-http://localhost:8080/api
-```
-
-### Authentication
-All endpoints require JWT token except authentication endpoints:
-```bash
-Authorization: Bearer <your_jwt_token>
-```
-
-### Key Endpoints
-
-#### Authentication
-- `POST /auth/register` - Register new user
-- `POST /auth/verify-otp` - Verify email with OTP
-- `POST /auth/login` - User login
-- `POST /auth/resend-otp` - Resend verification code
-
-#### Spaces
-- `GET /spaces` - Get all user spaces
-- `POST /spaces` - Create new space (max 10)
-- `PUT /spaces/{id}` - Update space
-- `DELETE /spaces/{id}` - Delete space
-
-#### Products
-- `GET /spaces/{spaceId}/products` - Get products in space
-- `POST /spaces/{spaceId}/products` - Add product to space
-- `PUT /spaces/{spaceId}/products/{id}` - Update product
-- `POST /spaces/{spaceId}/products/{id}/stock/add` - Add stock
-- `POST /spaces/{spaceId}/products/{id}/stock/remove` - Remove stock
-
-#### Analytics
-- `GET /dashboard/overview` - Dashboard metrics
-- `GET /dashboard/insights` - Inventory insights
-- `GET /dashboard/low-stock-alerts` - Low stock alerts
-
-**For complete API documentation, see** [API_documentation.md](API_documentation.md)
+> Do not commit credentials or secrets to source control.
 
 ---
 
 ## 📁 Project Structure
 
+- `backend/inventory/`
+  - `pom.xml` — Maven project definition
+  - `src/main/java/` — backend source code
+  - `src/main/resources/application.properties` — backend runtime configuration
+- `frontend/`
+  - `package.json` — frontend dependencies and scripts
+  - `src/` — Next.js application source
+  - `public/` — static assets
+
+---
+
+## 📘 API Documentation
+
+When the backend is running, API docs are available at:
+
+- `http://localhost:8080/swagger-ui/index.html`
+- `http://localhost:8080/v3/api-docs`
+
+---
+
+## 🧪 Testing
+
+Backend:
+
+```bash
+cd backend/inventory
+./mvnw.cmd test
 ```
-Inventory-Management-App/
-├── backend/inventory/src/main/java/app/web/inventory/
-│   ├── config/         # Config Classes (Global Exception, Security Config)
-│   ├── controller/     # REST API endpoints
-│   ├── dto/            # Data Transfer Objects
-│   ├── model/          # Entities
-│   ├── repository/     # JPA entities
-│   ├── security/       # Security layer (JWT util & Filter)
-│   ├── service/        # Business logic
-├── frontend/src/
-│   ├── components/     # React components
-│   ├── pages/          # Page components
-│   ├── hooks/          # Custom React hooks
-│   ├── utils/          # Utility functions
-│   ├── styles/         # CSS modules
-│   └── api/            # API integration
-└── API_documentation.md
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run type-check
 ```
 
 ---
 
-## 🤝 Contributing
+## 📌 Notes
 
-We welcome contributions! Here's how to get started:
-
-#### 1. Fork the repository
-
-#### 2. Create a feature branch
-```bash
-git checkout -b feature/amazing-feature
-```
-
-#### 3. Make your changes
-- Follow existing code style
-- Add tests if applicable
-- Update documentation
-
-#### 4. Commit changes
-```bash
-git commit -m 'Add some amazing feature'
-```
-
-#### 5. Push to branch
-```bash
-git push origin feature/amazing-feature
-```
-
-#### 6. Open a Pull Request
-
-### Development Guidelines
-- Follow Java and React best practices
-- Write clear commit messages
-- Test your changes thoroughly
-- Update API documentation for backend changes
-
----
-
-## 🐛 Issues & Support
-
-**Found a bug or have a feature request?**
-- Check existing [issues](https://github.com/VishalKmk/Inventory-Management-App/issues)
-- Create a new issue with detailed description
-- Include screenshots for UI-related issues
+- The frontend expects the backend API to be available at `http://localhost:8080`.
+- OAuth callback is configured for `http://localhost:4028/oauth/callback`.
+- The backend currently uses MySQL default connection settings in `application.properties`.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 📞 Contact
-
-**Vishal Kumar**
-- **GitHub**: [@VishalKmk](https://github.com/VishalKmk)
-- **Email**: bishalkarmakar2468@gmail.com
-
----
-
-## 🙏 Acknowledgments
-
-- Built with modern web technologies
-- Inspired by real-world inventory management needs
-- Thanks to the open-source community
-
----
-
-**⭐ Star this repository if you find it helpful!**
-
----
-
-*Last updated: September 2025*
+This project is licensed under the Apache License 2.0

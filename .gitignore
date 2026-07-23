@@ -31,14 +31,10 @@ nbproject/private/
 nbbuild/
 nbdist/
 .nb-gradle/
-/mvnw
-mvnw.cmd
 
 # Environment configuration
 src/main/resources/application.properties
-src/main/resources/application-*.properties
-src/main/resources/application.yml
-src/main/resources/application-*.yml
+
 *.env
 .env*
 
@@ -66,15 +62,7 @@ Thumbs.db
 
 # Documentation
 HELP.md
-
-# Maven specific
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
+API_docs.md
 
 # Logs
 logs
@@ -85,6 +73,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Frontend
+.next
 node_modules
 dist
 dist-ssr
@@ -102,3 +92,5 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.agents
+.github

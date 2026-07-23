@@ -191,7 +191,8 @@ public class AuditLogService {
         LocalDateTime startDate = endDate.minusDays(days);
         Map<String, Long> daily = auditLogRepository.countDailyActivityBySpaceId(spaceId, startDate, endDate).stream()
                 .collect(Collectors.toMap(row -> row[0].toString(), row -> (Long) row[1]));
-        Map<String, Long> operations = auditLogRepository.countOperationBreakdownBySpaceId(spaceId, startDate, endDate).stream()
+        Map<String, Long> operations = auditLogRepository.countOperationBreakdownBySpaceId(spaceId, startDate, endDate)
+                .stream()
                 .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
         long total = daily.values().stream().mapToLong(Long::longValue).sum();
         return new ActivityTrendsDto(daily, operations, total, days + " days");
