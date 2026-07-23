@@ -10,17 +10,18 @@ This repo contains:
 
 ## 📋 Table of Contents
 
-- [Features](#-features)
-- [Technology Stack](#-technology-stack)
-- [Architecture](#-architecture)
-- [Installation](#-installation)
-- [Running the App](#-running-the-app)
-- [Configuration](#-configuration)
-- [Project Structure](#-project-structure)
-- [API Documentation](#-api-documentation)
-- [Testing](#-testing)
-- [Notes](#-notes)
-- [License](#-license)
+- [✨ Features](#-features)
+- [🛠️ Technology Stack](#️-technology-stack)
+- [🏗️ Architecture](#️-architecture)
+- [🚀 Installation](#-installation)
+- [▶️ Running the App](#️-running-the-app)
+- [⚙️ Configuration](#️-configuration)
+- [📁 Project Structure](#-project-structure)
+- [📘 API Documentation](#-api-documentation)
+- [🧪 Testing](#-testing)
+- [📌 Notes](#-notes)
+- [🤖 AI-Assisted Development](#-ai-assisted-development)
+- [📄 License](#-license)
 
 ---
 
@@ -212,4 +213,6 @@ All architectural decisions, feature selection, integration, testing, and final 
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0
+This project is licensed under the **Apache License 2.0**.
+
+See the full license here: **[LICENSE](./LICENSE)**.
