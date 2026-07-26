@@ -22,13 +22,15 @@ public class UserService {
     }
 
     public Users register(String name, String email, String rawPassword) {
-        if (userRepository.findByEmail(email).isPresent()) {
-            throw new DuplicateResourceException("User already exists with email: " + email);
+        String normalizedEmail = normalizeEmail(email);
+
+        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+            throw new DuplicateResourceException("User already exists with email: " + normalizedEmail);
         }
 
         Users user = new Users();
         user.setName(name);
-        user.setEmail(email);
+        user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(rawPassword));
         user.setAuthProvider("local");
         user.setVerified(false);
@@ -37,11 +39,12 @@ public class UserService {
     }
 
     public Users findOrCreateGoogleUser(String email, String name) {
-        return userRepository.findByEmail(email)
+        String normalizedEmail = normalizeEmail(email);
+        return userRepository.findByEmail(normalizedEmail)
                 .orElseGet(() -> {
                     Users user = new Users();
                     user.setName(name);
-                    user.setEmail(email);
+                    user.setEmail(normalizedEmail);
                     user.setPasswordHash(null);
                     user.setAuthProvider("google");
                     user.setVerified(true);
@@ -50,7 +53,7 @@ public class UserService {
     }
 
     public Optional<Users> findByEmail(String email) {
-        return userRepository.findByEmail(email);
+        return userRepository.findByEmail(normalizeEmail(email));
     }
 
     @SuppressWarnings("null")
@@ -88,5 +91,13 @@ public class UserService {
     // Get user as DTO by ID
     public Optional<UserDto> getUserDtoById(UUID id) {
         return findById(id).map(this::convertToDto);
+    }
+
+    // Normalize email by trimming and converting to lowercase
+    public static String normalizeEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        return email.trim().toLowerCase();
     }
 }

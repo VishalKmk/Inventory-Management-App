@@ -140,9 +140,7 @@ public class ProductService {
         return convertToResponseDto(product);
     }
 
-    /**
-     * Update product details in a specific space.
-     */
+    // Update product details in a specific space.
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
             String name, String sku, String category, String imageUrl,
             Double price, Integer minimumQuantity, Integer maximumQuantity) {
@@ -213,10 +211,11 @@ public class ProductService {
         return convertToResponseDto(updatedProduct);
     }
 
-    /**
-     * Add stock to a product in a specific space.
-     */
+    // Add stock to a product in a specific space.
     public ProductResponseDto addStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
+        Objects.requireNonNull(productId, "Product ID cannot be null");
+        Objects.requireNonNull(spaceId, "Space ID cannot be null");
+        Objects.requireNonNull(ownerId, "Owner ID cannot be null");
         checkWriteAccess(spaceId, ownerId);
 
         Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
@@ -228,16 +227,21 @@ public class ProductService {
         }
 
         Integer oldStock = product.getCurrentStock();
-        Integer newStock = oldStock + quantity;
 
-        if (product.getMaximumQuantity() != null && newStock > product.getMaximumQuantity()) {
+        int rowsUpdated = productRepository.incrementStock(productId, quantity);
+
+        if (rowsUpdated == 0) {
+            // Re-fetch to report the up-to-date state in the error message.
+            Products current = productRepository.findById(productId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
             throw new IllegalArgumentException(
-                    "Cannot exceed maximum quantity. Current: " + oldStock +
-                            ", Requested: " + quantity + ", Maximum: " + product.getMaximumQuantity());
+                    "Cannot exceed maximum quantity. Current: " + current.getCurrentStock() +
+                            ", Requested: " + quantity + ", Maximum: " + current.getMaximumQuantity());
         }
 
-        product.setCurrentStock(newStock);
-        Products updatedProduct = productRepository.save(product);
+        Products updatedProduct = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        Integer newStock = updatedProduct.getCurrentStock();
 
         Map<String, Object> details = Map.of(
                 "productName", product.getName(),
@@ -264,6 +268,9 @@ public class ProductService {
      * Remove stock from a product in a specific space.
      */
     public ProductResponseDto removeStockInSpace(UUID productId, UUID spaceId, UUID ownerId, Integer quantity) {
+        Objects.requireNonNull(productId, "Product ID cannot be null");
+        Objects.requireNonNull(spaceId, "Space ID cannot be null");
+        Objects.requireNonNull(ownerId, "Owner ID cannot be null");
         checkWriteAccess(spaceId, ownerId);
 
         Products product = productRepository.findByIdAndUserHasAccess(productId, ownerId)
@@ -275,14 +282,20 @@ public class ProductService {
         }
 
         Integer oldStock = product.getCurrentStock();
-        int newStock = oldStock - quantity;
-        if (newStock < 0) {
+
+        // Atomic decrement at the DB level
+        int rowsUpdated = productRepository.decrementStock(productId, quantity);
+
+        if (rowsUpdated == 0) {
+            Products current = productRepository.findById(productId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
             throw new IllegalArgumentException(
-                    "Insufficient stock. Current: " + oldStock + ", Requested: " + quantity);
+                    "Insufficient stock. Current: " + current.getCurrentStock() + ", Requested: " + quantity);
         }
 
-        product.setCurrentStock(newStock);
-        Products updatedProduct = productRepository.save(product);
+        Products updatedProduct = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        Integer newStock = updatedProduct.getCurrentStock();
 
         Map<String, Object> details = Map.of(
                 "productName", product.getName(),

@@ -7,12 +7,27 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import app.web.inventory.model.Products;
 
 public interface ProductRepository extends JpaRepository<Products, UUID> {
+
+    // Atomically decrease current stock only when sufficient stock exists
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Products p SET p.currentStock = p.currentStock - :quantity " +
+            "WHERE p.id = :productId AND p.currentStock >= :quantity")
+    int decrementStock(@Param("productId") UUID productId, @Param("quantity") Integer quantity);
+
+    // Atomically increase current stock only when it does not exceed
+    // maximumQuantity
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Products p SET p.currentStock = p.currentStock + :quantity " +
+            "WHERE p.id = :productId " +
+            "AND (p.maximumQuantity IS NULL OR p.currentStock + :quantity <= p.maximumQuantity)")
+    int incrementStock(@Param("productId") UUID productId, @Param("quantity") Integer quantity);
 
     // Delete all products in a specific space
     void deleteBySpaceId(UUID spaceId);

@@ -26,13 +26,14 @@ public class OtpService {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email cannot be null or blank");
         }
+        String normalizedEmail = UserService.normalizeEmail(email);
 
         // Delete any existing OTPs for this email before creating new one
-        otpRepository.deleteByEmail(email);
+        otpRepository.deleteByEmail(normalizedEmail);
 
         String code = String.format("%06d", rnd.nextInt(1_000_000));
         Otp otp = new Otp();
-        otp.setEmail(email);
+        otp.setEmail(normalizedEmail);
         otp.setCode(code);
         otp.setExpiresAt(Instant.now().plusSeconds(ttlMinutes * 60L));
         otpRepository.save(otp);
@@ -43,8 +44,9 @@ public class OtpService {
         if (email == null || code == null) {
             return false;
         }
+        String normalizedEmail = UserService.normalizeEmail(email);
 
-        var maybe = otpRepository.findTopByEmailOrderByExpiresAtDesc(email);
+        var maybe = otpRepository.findTopByEmailOrderByExpiresAtDesc(normalizedEmail);
         if (maybe.isEmpty())
             return false;
 

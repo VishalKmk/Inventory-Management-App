@@ -511,7 +511,7 @@ public class SpaceService {
         List<Spaces> memberSpaces = spaceMemberRepository
                 .findActiveSpacesByUserId(userId)
                 .stream()
-                .map(SpaceMember::getSpace)
+                .map(member -> member.getSpace())
                 .filter(s -> !s.getOwner().getId().equals(userId)) // avoid duplicates
                 .collect(Collectors.toList());
 
@@ -520,10 +520,8 @@ public class SpaceService {
         return allSpaces;
     }
 
-    /*
-     * Get space by ID without user check (used internally when we already have
-     * space object)
-     */
+    // Get space by ID without user check (used internally when we already have
+    // space object)
     public Spaces getSpaceById(UUID spaceId) {
         if (spaceId == null) {
             throw new IllegalArgumentException("Space ID cannot be null");
@@ -554,7 +552,7 @@ public class SpaceService {
 
         // Try member
         return spaceMemberRepository.findBySpaceIdAndUserId(spaceId, userId)
-                .map(app.web.inventory.model.SpaceMember::getSpace);
+                .map(SpaceMember::getSpace);
     }
 
     // Check if user has access to space (owner or member)
