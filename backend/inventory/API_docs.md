@@ -87,18 +87,70 @@ Base Path: `/api/auth`
 {
   "success": true,
   "message": "Email verified successfully",
-  "data": "OTP verified"
+  "data": {
+      "verified": true,
+      "attemptsRemaining": 1,
+      "locked": false
+    }
 }
 ```
 
-**Error Response (400 Bad Request):**
+**Error Response Incorrect OTP (400 Bad Request):**
 ```json
 {
   "success": false,
-  "message": "Invalid or expired OTP",
-  "data": null
+  "message": "Incorrect OTP.",
+  "data": {
+      "verified": false,
+      "attemptsRemaining": 4,
+      "locked": false
+    }
 }
 ```
+**Error Response: Incorrect OTP, less than or more than 6 digit (400 Bad Request):**
+```josn
+{
+  "success": false,
+  "message": "OTP can not be less or more than 6 digits.",
+  "data": {
+      "verified": false,
+      "attemptsRemaining": 3,
+      "locked": false
+    }
+}
+```
+**Error Response: Incorrect OTP, non numeric (400 Bad Request):**
+```json
+{
+  "success": false,
+  "message": "OTP must be a number.",
+  "data": {
+      "verified": false,
+      "attemptsRemaining": 2,
+      "locked": false
+    }
+}
+```
+**Request Body**
+```json
+{
+  "email": "jhon.doe@example.com",
+  "code": ""
+}
+```
+**Error Response: Empty OTP Field (400 Bad Request):**
+```json
+{
+  "success": false,
+  "message": "OTP can not be empty.",
+  "data": {
+      "verified": false,
+      "attemptsRemaining": 3,
+      "locked": false
+    }
+}
+```
+**Note: The user can try 5 times in each attemps, if 5 attemps are failed user can request a new OTP in endpoint /resend-otp, and a new OTP is created. OTP is valid for 10 minutes, this feature is implemented to reduce brute force OTP guesses.**
 
 ### 1.3 User Login
 - **Endpoint:** `POST /api/auth/login`
@@ -135,7 +187,7 @@ Base Path: `/api/auth`
 
 ### 1.4 Resend OTP
 - **Endpoint:** `POST /api/auth/resend-otp`
-- **Description:** Resends an OTP to the user's email address.
+- **Description:** Resends an OTP to the user's email address. Subject to a daily rate limit.
 - **Auth Required:** No
 
 **Request Body:**

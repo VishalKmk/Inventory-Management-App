@@ -1,6 +1,7 @@
 package app.web.inventory.exception;
 
 import app.web.inventory.dto.api.ApiResponse;
+import app.web.inventory.dto.auth.OtpVerifyResponseDto;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,40 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleSecurityException(SecurityException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(OtpExpiredException.class)
+    public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> handleOtpExpired(OtpExpiredException ex) {
+        OtpVerifyResponseDto dto = new OtpVerifyResponseDto(false, 0, false);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiResponse<>(false, ex.getMessage(), dto));
+    }
+
+    @ExceptionHandler(InvalidOtpFormatException.class)
+    public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> handleInvalidOtpFormat(InvalidOtpFormatException ex) {
+        OtpVerifyResponseDto dto = new OtpVerifyResponseDto(false, ex.getAttemptsRemaining(), ex.isLocked());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiResponse<>(false, ex.getMessage(), dto));
+    }
+
+    @ExceptionHandler(OtpMismatchException.class)
+    public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> handleOtpMismatch(OtpMismatchException ex) {
+        OtpVerifyResponseDto dto = new OtpVerifyResponseDto(false, ex.getAttemptsRemaining(), false);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiResponse<>(false, ex.getMessage(), dto));
+    }
+
+    @ExceptionHandler(OtpLockedException.class)
+    public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> handleOtpLocked(OtpLockedException ex) {
+        OtpVerifyResponseDto dto = new OtpVerifyResponseDto(false, 0, true);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(new ApiResponse<>(false, ex.getMessage(), dto));
+    }
+
+    @ExceptionHandler(OtpRateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOtpRateLimitExceeded(OtpRateLimitExceededException ex) {
+        ApiResponse<Object> response = ApiResponse.error(ex.getMessage());
+        return ResponseEntity.status(429).body(response); // HTTP 429 Too Many Requests
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
