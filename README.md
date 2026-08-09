@@ -176,25 +176,6 @@ When the backend is running, API docs are available at:
 
 ---
 
-## 🧪 Testing
-
-Backend:
-
-```bash
-cd backend/inventory
-./mvnw.cmd test
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run lint
-npm run type-check
-```
-
----
-
 ## 📌 Notes
 
 - The frontend expects the backend API to be available at `http://localhost:8080`.
