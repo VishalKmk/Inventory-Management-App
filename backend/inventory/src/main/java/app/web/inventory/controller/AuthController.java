@@ -4,6 +4,7 @@ import app.web.inventory.dto.api.ApiResponse;
 import app.web.inventory.dto.auth.LoginRequest;
 import app.web.inventory.dto.auth.LoginResponseDto;
 import app.web.inventory.dto.auth.OtpRequest;
+import app.web.inventory.dto.auth.OtpVerifyResponseDto;
 import app.web.inventory.dto.auth.RegisterRequest;
 import app.web.inventory.dto.user.UserResponseDto;
 import jakarta.validation.Valid;
@@ -52,15 +53,11 @@ public class AuthController {
      * POST /api/auth/verify-otp
      */
     @PostMapping("/verify-otp")
-    public ResponseEntity<ApiResponse<String>> verifyOtp(@Valid @RequestBody OtpRequest request) {
-        boolean isValid = authService.verifyOtp(request.getEmail(), request.getCode());
+    public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> verifyOtp(@RequestBody OtpRequest request) {
+        int attemptsRemaining = authService.verifyOtp(request.getEmail(), request.getCode());
 
-        if (!isValid) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("Invalid or expired OTP"));
-        }
-
-        return ResponseEntity.ok(ApiResponse.success("Email verified successfully", "OTP verified"));
+        OtpVerifyResponseDto dto = new OtpVerifyResponseDto(true, attemptsRemaining, false);
+        return ResponseEntity.ok(ApiResponse.success("Email verified successfully", dto));
     }
 
     /**

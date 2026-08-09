@@ -14,6 +14,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.beans.factory.annotation.Value;
 
 import app.web.inventory.security.JwtFilter;
 import app.web.inventory.security.OAuth2SuccessHandler;
@@ -21,6 +22,10 @@ import app.web.inventory.security.OAuth2SuccessHandler;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Value("${frontend.url}")
+    String frontendUrl;
+
     private final JwtFilter jwtFilter;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
 
@@ -36,9 +41,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // Add these lines to permit Swagger
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
@@ -54,10 +57,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Allow specific origins (add your frontend URLs)
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:4028",
-                "http://127.0.0.1:4028"));
+        // Allow specific origins
+        configuration.setAllowedOrigins(Arrays.asList(frontendUrl));
 
         // Allow all HTTP methods
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
@@ -65,7 +66,7 @@ public class SecurityConfig {
         // Allow all headers
         configuration.setAllowedHeaders(Arrays.asList("*"));
 
-        // Allow credentials (important for authentication)
+        // Allow credentials
         configuration.setAllowCredentials(true);
 
         // Cache preflight response for 1 hour

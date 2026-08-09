@@ -10,17 +10,18 @@ This repo contains:
 
 ## 📋 Table of Contents
 
-- [Features](#-features)
-- [Technology Stack](#-technology-stack)
-- [Architecture](#-architecture)
-- [Installation](#-installation)
-- [Running the App](#-running-the-app)
-- [Configuration](#-configuration)
-- [Project Structure](#-project-structure)
-- [API Documentation](#-api-documentation)
-- [Testing](#-testing)
-- [Notes](#-notes)
-- [License](#-license)
+- [✨ Features](#-features)
+- [🛠️ Technology Stack](#️-technology-stack)
+- [🏗️ Architecture](#️-architecture)
+- [🚀 Installation](#-installation)
+- [▶️ Running the App](#️-running-the-app)
+- [⚙️ Configuration](#️-configuration)
+- [📁 Project Structure](#-project-structure)
+- [📘 API Documentation](#-api-documentation)
+- [🧪 Testing](#-testing)
+- [📌 Notes](#-notes)
+- [🤖 AI-Assisted Development](#-ai-assisted-development)
+- [📄 License](#-license)
 
 ---
 
@@ -175,25 +176,6 @@ When the backend is running, API docs are available at:
 
 ---
 
-## 🧪 Testing
-
-Backend:
-
-```bash
-cd backend/inventory
-./mvnw.cmd test
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run lint
-npm run type-check
-```
-
----
-
 ## 📌 Notes
 
 - The frontend expects the backend API to be available at `http://localhost:8080`.
@@ -202,6 +184,16 @@ npm run type-check
 
 ---
 
+## 🤖 AI-Assisted Development
+
+This project was developed with AI assistance as a productivity tool for tasks such as brainstorming, debugging, documentation, refactoring suggestions, and implementation guidance.
+
+All architectural decisions, feature selection, integration, testing, and final code review were performed by me. The project was built as a learning exercise, and I understand and maintain the codebase myself.
+
+---
+
 ## 📄 License
 
-This project is licensed under the Apache License 2.0
+This project is licensed under the **Apache License 2.0**.
+
+See the full license here: **[LICENSE](./LICENSE)**.

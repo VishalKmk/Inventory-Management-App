@@ -247,7 +247,7 @@ Sign In / Sign Up (Google or email+password)
 
 ---
 
-## 8. Key states worth designing explicitly
+## 8. Key states and edge cases
 
 - **Empty state**: brand-new user, zero Spaces — strong CTA to create one.
 - **Unverified email**: user has registered but not yet completed OTP

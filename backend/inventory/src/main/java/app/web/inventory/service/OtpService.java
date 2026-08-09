@@ -1,65 +1,137 @@
 package app.web.inventory.service;
 
 import java.security.SecureRandom;
-import java.time.Instant;
+import java.time.Duration;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import app.web.inventory.model.Otp;
-import app.web.inventory.repository.OtpRepository;
-import jakarta.transaction.Transactional;
+import app.web.inventory.exception.InvalidOtpFormatException;
+import app.web.inventory.exception.OtpExpiredException;
+import app.web.inventory.exception.OtpLockedException;
+import app.web.inventory.exception.OtpMismatchException;
+import app.web.inventory.exception.OtpRateLimitExceededException;
 
 @Service
-@Transactional
 public class OtpService {
-    private final OtpRepository otpRepository;
-    private final int ttlMinutes;
+
+    private static final String OTP_KEY_PREFIX = "otp:";
+    private static final String ATTEMPTS_KEY_PREFIX = "otp_attempts:";
+    private static final String RESEND_LIMIT_KEY_PREFIX = "otp_resend_limit:";
+
+    private static final int MAX_ATTEMPTS = 5; // max incorrect attempts before locking
+    private static final int MAX_DAILY_RESENDS = 2; // max resends per day limit
+    private static final Pattern SIX_DIGIT_PATTERN = Pattern.compile("^\\d{6}$");
+
+    private final StringRedisTemplate redisTemplate;
+    private final Duration ttl;
     private final SecureRandom rnd = new SecureRandom();
 
-    public OtpService(OtpRepository otpRepository, @Value("${app.otp.ttl-minutes:10}") int ttlMinutes) {
-        this.otpRepository = otpRepository;
-        this.ttlMinutes = ttlMinutes;
+    public OtpService(StringRedisTemplate redisTemplate,
+            @Value("${app.otp.ttl-minutes:10}") long ttlMinutes) {
+        this.redisTemplate = redisTemplate;
+        this.ttl = Duration.ofMinutes(ttlMinutes);
     }
 
-    public Otp createOtpFor(String email) {
+    public String createOtpFor(String email) {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email cannot be null or blank");
         }
+        String normalizedEmail = UserService.normalizeEmail(email);
 
-        // Delete any existing OTPs for this email before creating new one
-        otpRepository.deleteByEmail(email);
+        // Check and enforce the 1-day rate limit for resending/generating OTPs
+        checkAndIncrementResendLimit(normalizedEmail);
+
+        String otpKey = OTP_KEY_PREFIX + normalizedEmail;
+        String attemptsKey = ATTEMPTS_KEY_PREFIX + normalizedEmail;
 
         String code = String.format("%06d", rnd.nextInt(1_000_000));
-        Otp otp = new Otp();
-        otp.setEmail(email);
-        otp.setCode(code);
-        otp.setExpiresAt(Instant.now().plusSeconds(ttlMinutes * 60L));
-        otpRepository.save(otp);
-        return otp;
+
+        redisTemplate.opsForValue().set(otpKey, code, ttl);
+        redisTemplate.delete(attemptsKey);
+
+        return code;
     }
 
-    public boolean verify(String email, String code) {
-        if (email == null || code == null) {
-            return false;
+    private void checkAndIncrementResendLimit(String normalizedEmail) {
+        String limitKey = RESEND_LIMIT_KEY_PREFIX + normalizedEmail;
+
+        Long count = redisTemplate.opsForValue().increment(limitKey);
+
+        // If this is the very first request, set its expiration window to exactly 24
+        // hours
+        if (count != null && count == 1L) {
+            redisTemplate.expire(limitKey, Duration.ofDays(1));
         }
 
-        var maybe = otpRepository.findTopByEmailOrderByExpiresAtDesc(email);
-        if (maybe.isEmpty())
-            return false;
+        if (count != null && count > MAX_DAILY_RESENDS) {
+            throw new OtpRateLimitExceededException("Daily OTP request limit reached. Please try again tomorrow.");
+        }
+    }
 
-        var otp = maybe.get();
+    public int verify(String email, String code) {
+        String normalizedEmail = UserService.normalizeEmail(email);
+        String otpKey = OTP_KEY_PREFIX + normalizedEmail;
+        String attemptsKey = ATTEMPTS_KEY_PREFIX + normalizedEmail;
 
-        // Always delete expired OTPs immediately
-        if (otp.getExpiresAt().isBefore(Instant.now())) {
-            otpRepository.delete(otp);
-            return false;
+        String stored = redisTemplate.opsForValue().get(otpKey);
+        if (stored == null) {
+            throw new OtpExpiredException("OTP expired or not requested.");
         }
 
-        boolean isValid = otp.getCode().equals(code);
+        boolean wellFormed = code != null && SIX_DIGIT_PATTERN.matcher(code).matches();
 
-        otpRepository.delete(otp);
+        if (!wellFormed) {
+            String reason = formatErrorMessage(code);
+            burnAttemptOrThrowMismatch(otpKey, attemptsKey, reason, true);
+            return -1;
+        }
 
-        return isValid;
+        if (stored.equals(code)) {
+            long usedAttempts = readUsedAttempts(attemptsKey);
+            redisTemplate.delete(otpKey);
+            redisTemplate.delete(attemptsKey);
+            return (int) Math.max(0, MAX_ATTEMPTS - usedAttempts);
+        }
+
+        burnAttemptOrThrowMismatch(otpKey, attemptsKey, "Incorrect OTP.", false);
+        return -1;
+    }
+
+    private void burnAttemptOrThrowMismatch(String otpKey, String attemptsKey, String message, boolean isFormatError) {
+        Long attempts = redisTemplate.opsForValue().increment(attemptsKey);
+        if (attempts != null && attempts == 1L) {
+            redisTemplate.expire(attemptsKey, ttl);
+        }
+        long usedAttempts = attempts == null ? 1L : attempts;
+
+        if (usedAttempts >= MAX_ATTEMPTS) {
+            redisTemplate.delete(otpKey);
+            redisTemplate.delete(attemptsKey);
+            throw new OtpLockedException("Too many incorrect attempts. Please request a new OTP.");
+        }
+
+        int remaining = (int) Math.max(0, MAX_ATTEMPTS - usedAttempts);
+        if (isFormatError) {
+            throw new InvalidOtpFormatException(message, remaining, false);
+        }
+        throw new OtpMismatchException(message, remaining);
+    }
+
+    private long readUsedAttempts(String attemptsKey) {
+        String attemptsStr = redisTemplate.opsForValue().get(attemptsKey);
+        return attemptsStr == null ? 0L : Long.parseLong(attemptsStr);
+    }
+
+    private String formatErrorMessage(String code) {
+        if (code == null || code.isBlank()) {
+            return "OTP can not be empty.";
+        }
+        if (!code.chars().allMatch(Character::isDigit)) {
+            return "OTP must be a number.";
+        }
+        return "OTP can not be less or more than 6 digits.";
     }
 }
