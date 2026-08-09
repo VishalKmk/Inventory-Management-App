@@ -13,45 +13,38 @@ import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.model.Users;
 import app.web.inventory.service.AuthService;
-import app.web.inventory.service.UserService;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    private final UserService userService;
     private final AuthService authService;
 
-    public AuthController(UserService userService, AuthService authService) {
-        this.userService = userService;
+    public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
     /**
-     * Register a new user
+     * Register a new user or continue an existing unverified registration.
      * POST /api/auth/register
      */
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserResponseDto>> register(@Valid @RequestBody RegisterRequest request) {
-        Users user = userService.register(request.getName(), request.getEmail(), request.getPassword());
-        authService.sendOtp(request.getEmail());
+        Users user = authService.register(
+                request.getName(), request.getEmail(), request.getPassword());
 
         UserResponseDto userDto = new UserResponseDto(
-                user.getId(),
-                user.getEmail(),
-                user.getName(),
-                user.isVerified(),
-                user.getCreatedAt());
+                user.getId(), user.getEmail(), user.getName(), user.isVerified(), user.getCreatedAt());
 
-        return ResponseEntity.status(201)
-                .body(ApiResponse.success("User registered. OTP sent to email", userDto));
+        return ResponseEntity.ok(
+                ApiResponse.success("Registration started. OTP sent to email", userDto));
     }
 
     /**
-     * Verify OTP
+     * Verify OTP.
      * POST /api/auth/verify-otp
-     */
+     **/
     @PostMapping("/verify-otp")
     public ResponseEntity<ApiResponse<OtpVerifyResponseDto>> verifyOtp(@RequestBody OtpRequest request) {
         int attemptsRemaining = authService.verifyOtp(request.getEmail(), request.getCode());
@@ -61,22 +54,20 @@ public class AuthController {
     }
 
     /**
-     * Login with email and password
+     * Login with email and password.
      * POST /api/auth/login
-     */
+     **/
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@Valid @RequestBody LoginRequest request) {
         String token = authService.loginWithEmailAndPassword(request.getEmail(), request.getPassword());
-
         LoginResponseDto loginResponse = new LoginResponseDto(token);
-
         return ResponseEntity.ok(ApiResponse.success("Login successful", loginResponse));
     }
 
     /**
-     * Resend OTP
+     * Resend OTP.
      * POST /api/auth/resend-otp
-     */
+     **/
     @PostMapping("/resend-otp")
     public ResponseEntity<ApiResponse<String>> resendOtp(
             @Valid @RequestBody Map<String, @jakarta.validation.constraints.Email String> body) {

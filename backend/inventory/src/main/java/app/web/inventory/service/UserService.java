@@ -21,7 +21,8 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public Users register(String name, String email, String rawPassword) {
+    /** Creates a new unverified local user. */
+    public Users createLocalUser(String name, String email, String rawPassword) {
         String normalizedEmail = normalizeEmail(email);
 
         if (userRepository.findByEmail(normalizedEmail).isPresent()) {
@@ -36,6 +37,23 @@ public class UserService {
         user.setVerified(false);
 
         return userRepository.save(user);
+    }
+
+    public Users updatePendingRegistration(Users user, String name, String rawPassword) {
+        if (user.isVerified()) {
+            throw new IllegalStateException("Verified users cannot be updated through registration");
+        }
+
+        user.setName(name);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
+        user.setAuthProvider("local");
+
+        return userRepository.save(user);
+    }
+
+    /** Backwards-compatible registration helper for internal callers. */
+    public Users register(String name, String email, String rawPassword) {
+        return createLocalUser(name, email, rawPassword);
     }
 
     public Users findOrCreateGoogleUser(String email, String name) {
@@ -63,7 +81,7 @@ public class UserService {
 
     public boolean checkPassword(Users user, String rawPassword) {
         if (user.getPasswordHash() == null) {
-            return false; // Google-only account has no local password to check
+            return false;
         }
         return passwordEncoder.matches(rawPassword, user.getPasswordHash());
     }
@@ -73,27 +91,19 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    // Convert Users entity to UserDto
     public UserDto convertToDto(Users user) {
         return new UserDto(
-                user.getId(),
-                user.getEmail(),
-                user.getName(),
-                user.isVerified(),
-                user.getCreatedAt());
+                user.getId(), user.getEmail(), user.getName(), user.isVerified(), user.getCreatedAt());
     }
 
-    // Get user as DTO by email
     public Optional<UserDto> getUserDtoByEmail(String email) {
         return findByEmail(email).map(this::convertToDto);
     }
 
-    // Get user as DTO by ID
     public Optional<UserDto> getUserDtoById(UUID id) {
         return findById(id).map(this::convertToDto);
     }
 
-    // Normalize email by trimming and converting to lowercase
     public static String normalizeEmail(String email) {
         if (email == null) {
             return null;

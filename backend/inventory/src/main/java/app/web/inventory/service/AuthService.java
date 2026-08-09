@@ -2,6 +2,7 @@ package app.web.inventory.service;
 
 import org.springframework.stereotype.Service;
 
+import app.web.inventory.exception.DuplicateResourceException;
 import app.web.inventory.model.Users;
 import app.web.inventory.security.JwtUtil;
 
@@ -20,9 +21,33 @@ public class AuthService {
         this.jwtUtil = jwtUtil;
     }
 
+    public Users register(String name, String email, String rawPassword) {
+        String normalizedEmail = UserService.normalizeEmail(email);
+        Users existingUser = userService.findByEmail(normalizedEmail).orElse(null);
+
+        if (existingUser != null && existingUser.isVerified()) {
+            throw new DuplicateResourceException(
+                    "An account already exists with this email. Please log in.");
+        }
+
+        String code = otpService.createOtpFor(normalizedEmail);
+
+        Users user;
+        if (existingUser == null) {
+            user = userService.createLocalUser(name, normalizedEmail, rawPassword);
+        } else {
+            user = userService.updatePendingRegistration(existingUser, name, rawPassword);
+        }
+        emailService.sendOtp(normalizedEmail, code);
+
+        return user;
+    }
+
+    /** Resend an OTP for an existing registration. */
     public void sendOtp(String email) {
-        String code = otpService.createOtpFor(email);
-        emailService.sendOtp(email, code);
+        String normalizedEmail = UserService.normalizeEmail(email);
+        String code = otpService.createOtpFor(normalizedEmail);
+        emailService.sendOtp(normalizedEmail, code);
     }
 
     public int verifyOtp(String email, String code) {

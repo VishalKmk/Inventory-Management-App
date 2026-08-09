@@ -19,10 +19,10 @@ public class OtpService {
 
     private static final String OTP_KEY_PREFIX = "otp:";
     private static final String ATTEMPTS_KEY_PREFIX = "otp_attempts:";
-    private static final String RESEND_LIMIT_KEY_PREFIX = "otp_resend_limit:";
+    private static final String REQUEST_LIMIT_KEY_PREFIX = "otp_request_limit:";
 
-    private static final int MAX_ATTEMPTS = 5; // max incorrect attempts before locking
-    private static final int MAX_DAILY_RESENDS = 2; // max resends per day limit
+    private static final int MAX_ATTEMPTS = 5;
+    private static final int MAX_DAILY_OTP_REQUESTS = 2;
     private static final Pattern SIX_DIGIT_PATTERN = Pattern.compile("^\\d{6}$");
 
     private final StringRedisTemplate redisTemplate;
@@ -39,10 +39,10 @@ public class OtpService {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email cannot be null or blank");
         }
+
         String normalizedEmail = UserService.normalizeEmail(email);
 
-        // Check and enforce the 1-day rate limit for resending/generating OTPs
-        checkAndIncrementResendLimit(normalizedEmail);
+        checkAndIncrementRequestLimit(normalizedEmail);
 
         String otpKey = OTP_KEY_PREFIX + normalizedEmail;
         String attemptsKey = ATTEMPTS_KEY_PREFIX + normalizedEmail;
@@ -55,19 +55,18 @@ public class OtpService {
         return code;
     }
 
-    private void checkAndIncrementResendLimit(String normalizedEmail) {
-        String limitKey = RESEND_LIMIT_KEY_PREFIX + normalizedEmail;
+    private void checkAndIncrementRequestLimit(String normalizedEmail) {
+        String limitKey = REQUEST_LIMIT_KEY_PREFIX + normalizedEmail;
 
         Long count = redisTemplate.opsForValue().increment(limitKey);
 
-        // If this is the very first request, set its expiration window to exactly 24
-        // hours
         if (count != null && count == 1L) {
             redisTemplate.expire(limitKey, Duration.ofDays(1));
         }
 
-        if (count != null && count > MAX_DAILY_RESENDS) {
-            throw new OtpRateLimitExceededException("Daily OTP request limit reached. Please try again tomorrow.");
+        if (count != null && count > MAX_DAILY_OTP_REQUESTS) {
+            throw new OtpRateLimitExceededException(
+                    "Daily OTP request limit reached. Please try again tomorrow.");
         }
     }
 
@@ -100,11 +99,14 @@ public class OtpService {
         return -1;
     }
 
-    private void burnAttemptOrThrowMismatch(String otpKey, String attemptsKey, String message, boolean isFormatError) {
+    private void burnAttemptOrThrowMismatch(
+            String otpKey, String attemptsKey, String message, boolean isFormatError) {
+
         Long attempts = redisTemplate.opsForValue().increment(attemptsKey);
         if (attempts != null && attempts == 1L) {
             redisTemplate.expire(attemptsKey, ttl);
         }
+
         long usedAttempts = attempts == null ? 1L : attempts;
 
         if (usedAttempts >= MAX_ATTEMPTS) {
@@ -117,6 +119,7 @@ public class OtpService {
         if (isFormatError) {
             throw new InvalidOtpFormatException(message, remaining, false);
         }
+
         throw new OtpMismatchException(message, remaining);
     }
 
