@@ -14,12 +14,15 @@ public class AuthService {
     private final OtpService otpService;
     private final EmailService emailService;
     private final JwtUtil jwtUtil;
+    private final LoginRateLimiter loginRateLimiter;
 
-    public AuthService(UserService userService, OtpService otpService, EmailService emailService, JwtUtil jwtUtil) {
+    public AuthService(UserService userService, OtpService otpService, EmailService emailService, JwtUtil jwtUtil,
+                       LoginRateLimiter loginRateLimiter) {
         this.userService = userService;
         this.otpService = otpService;
         this.emailService = emailService;
         this.jwtUtil = jwtUtil;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     public Users register(String name, String email, String rawPassword) {
@@ -44,7 +47,7 @@ public class AuthService {
         return user;
     }
 
-    /** Resend an OTP for an existing registration. */
+    // Resend an OTP for an existing registration.
     public void sendOtp(String email) {
         String normalizedEmail = UserService.normalizeEmail(email);
         String code = otpService.createOtpFor(normalizedEmail);
@@ -57,11 +60,15 @@ public class AuthService {
         return remaining;
     }
 
-    public String loginWithEmailAndPassword(String email, String rawPassword) {
-        Users user = userService.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+    public String loginWithEmailAndPassword(String email, String rawPassword, String clientIp) {
+        String normalizedEmail = UserService.normalizeEmail(email);
 
-        if (!userService.checkPassword(user, rawPassword)) {
+        loginRateLimiter.checkAllowed(clientIp, normalizedEmail);
+
+        Users user = userService.findByEmail(normalizedEmail).orElse(null);
+
+        if (user == null || !userService.checkPassword(user, rawPassword)) {
+            loginRateLimiter.recordFailure(clientIp, normalizedEmail);
             throw new IllegalArgumentException("Invalid credentials");
         }
 
@@ -69,6 +76,7 @@ public class AuthService {
             throw new IllegalStateException("Email not verified");
         }
 
+        loginRateLimiter.recordSuccess(normalizedEmail);
         return jwtUtil.generateToken(user.getId().toString(), user.getEmail());
     }
 

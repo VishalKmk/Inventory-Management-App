@@ -19,9 +19,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import app.web.inventory.audit.dto.AuditLogDto;
 import app.web.inventory.audit.dto.AuditLogFilterRequest;
 import app.web.inventory.audit.dto.AuditLogSummaryDto;
-import app.web.inventory.dashboard.dto.ActivityTrendsDto;
 import app.web.inventory.audit.model.AuditLog;
 import app.web.inventory.audit.repository.AuditLogRepository;
+import app.web.inventory.dashboard.dto.ActivityTrendsDto;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -214,7 +214,6 @@ public class AuditLogService {
         LocalDateTime startDate = endDate.minusDays(days);
 
         // All counting done in DB - no rows loaded into memory
-        @SuppressWarnings("null")
         Map<String, Long> dailyActivity = auditLogRepository
                 .countDailyActivityByUser(userId, startDate, endDate)
                 .stream()
@@ -222,7 +221,6 @@ public class AuditLogService {
                         row -> row[0].toString(),
                         row -> (Long) row[1]));
 
-        @SuppressWarnings("null")
         Map<String, Long> operationBreakdown = auditLogRepository
                 .countOperationBreakdownByUser(userId, startDate, endDate)
                 .stream()
@@ -230,7 +228,6 @@ public class AuditLogService {
                         row -> (String) row[0],
                         row -> (Long) row[1]));
 
-        @SuppressWarnings("null")
         long totalActivities = auditLogRepository
                 .countByUserIdAndTimestampBetween(userId, startDate, endDate);
 

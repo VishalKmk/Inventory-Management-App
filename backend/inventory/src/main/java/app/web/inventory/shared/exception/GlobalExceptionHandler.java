@@ -89,6 +89,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(429).body(response); // HTTP 429 Too Many Requests
     }
 
+    @ExceptionHandler(LoginRateLimitException.class)
+    public ResponseEntity<ApiResponse<Object>> handleLoginRateLimitExceeded(LoginRateLimitException ex) {
+        ApiResponse<Object> response = ApiResponse.error(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(response);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
             MethodArgumentNotValidException ex) {
