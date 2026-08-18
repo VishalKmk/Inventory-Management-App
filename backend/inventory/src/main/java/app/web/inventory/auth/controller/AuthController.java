@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import app.web.inventory.user.model.Users;
 import app.web.inventory.auth.service.AuthService;
+import app.web.inventory.shared.util.RequestUtil;
 
 import java.util.Map;
 
@@ -59,7 +60,8 @@ public class AuthController {
      **/
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@Valid @RequestBody LoginRequest request) {
-        String token = authService.loginWithEmailAndPassword(request.getEmail(), request.getPassword());
+        String clientIp = RequestUtil.getClientIpAddress();
+        String token = authService.loginWithEmailAndPassword(request.getEmail(), request.getPassword(), clientIp);
         LoginResponseDto loginResponse = new LoginResponseDto(token);
         return ResponseEntity.ok(ApiResponse.success("Login successful", loginResponse));
     }
