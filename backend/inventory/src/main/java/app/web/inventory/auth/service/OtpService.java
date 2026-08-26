@@ -13,17 +13,14 @@ import app.web.inventory.auth.exception.InvalidOtpFormatException;
 import app.web.inventory.auth.exception.OtpExpiredException;
 import app.web.inventory.auth.exception.OtpLockedException;
 import app.web.inventory.auth.exception.OtpMismatchException;
-import app.web.inventory.auth.exception.OtpRateLimitExceededException;
 
 @Service
 public class OtpService {
 
     private static final String OTP_KEY_PREFIX = "otp:";
     private static final String ATTEMPTS_KEY_PREFIX = "otp_attempts:";
-    private static final String REQUEST_LIMIT_KEY_PREFIX = "otp_request_limit:";
 
     private static final int MAX_ATTEMPTS = 5;
-    private static final int MAX_DAILY_OTP_REQUESTS = 2;
     private static final Pattern SIX_DIGIT_PATTERN = Pattern.compile("^\\d{6}$");
 
     private final StringRedisTemplate redisTemplate;
@@ -31,7 +28,7 @@ public class OtpService {
     private final SecureRandom rnd = new SecureRandom();
 
     public OtpService(StringRedisTemplate redisTemplate,
-            @Value("${app.otp.ttl-minutes:10}") long ttlMinutes) {
+                      @Value("${app.otp.ttl-minutes:10}") long ttlMinutes) {
         this.redisTemplate = redisTemplate;
         this.ttl = Duration.ofMinutes(ttlMinutes);
     }
@@ -43,8 +40,6 @@ public class OtpService {
 
         String normalizedEmail = UserService.normalizeEmail(email);
 
-        checkAndIncrementRequestLimit(normalizedEmail);
-
         String otpKey = OTP_KEY_PREFIX + normalizedEmail;
         String attemptsKey = ATTEMPTS_KEY_PREFIX + normalizedEmail;
 
@@ -54,21 +49,6 @@ public class OtpService {
         redisTemplate.delete(attemptsKey);
 
         return code;
-    }
-
-    private void checkAndIncrementRequestLimit(String normalizedEmail) {
-        String limitKey = REQUEST_LIMIT_KEY_PREFIX + normalizedEmail;
-
-        Long count = redisTemplate.opsForValue().increment(limitKey);
-
-        if (count != null && count == 1L) {
-            redisTemplate.expire(limitKey, Duration.ofDays(1));
-        }
-
-        if (count != null && count > MAX_DAILY_OTP_REQUESTS) {
-            throw new OtpRateLimitExceededException(
-                    "Daily OTP request limit reached. Please try again tomorrow.");
-        }
     }
 
     public int verify(String email, String code) {

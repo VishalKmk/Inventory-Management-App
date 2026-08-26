@@ -37,6 +37,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(UnverifiedRegistrationExistsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnverifiedRegistrationExists(
+            UnverifiedRegistrationExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -83,10 +90,12 @@ public class GlobalExceptionHandler {
                 .body(new ApiResponse<>(false, ex.getMessage(), dto));
     }
 
-    @ExceptionHandler(OtpRateLimitExceededException.class)
-    public ResponseEntity<ApiResponse<Object>> handleOtpRateLimitExceeded(OtpRateLimitExceededException ex) {
+    @ExceptionHandler(OtpResendRateLimitException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOtpResendRateLimitExceeded(OtpResendRateLimitException ex) {
         ApiResponse<Object> response = ApiResponse.error(ex.getMessage());
-        return ResponseEntity.status(429).body(response); // HTTP 429 Too Many Requests
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(response);
     }
 
     @ExceptionHandler(LoginRateLimitException.class)

@@ -35,3 +35,16 @@ spring.security.oauth2.client.registration.google.scope=openid,email,profile
 
 # Where the frontend should land after successful login
 app.oauth2.frontend-redirect-uri=
+
+# Redis
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+
+# Password rate limit
+app.login-ratelimit.base-seconds=
+app.login-ratelimit.max-seconds=
+app.login-ratelimit.strike-window-minutes=
+
+app.otp-resend.step-seconds=60,120,300,3600,86400
+# How long a strike count is remembered before it resets from inactivity.
+app.otp-resend.strike-window-hours=48
