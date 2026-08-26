@@ -8,6 +8,7 @@ import app.web.inventory.auth.dto.OtpVerifyResponseDto;
 import app.web.inventory.auth.dto.RegisterRequest;
 import app.web.inventory.user.dto.UserResponseDto;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,7 +28,7 @@ public class AuthController {
     }
 
     /**
-     * Register a new user or continue an existing unverified registration.
+     * Register a new user.
      * POST /api/auth/register
      */
     @PostMapping("/register")
@@ -72,11 +73,13 @@ public class AuthController {
      **/
     @PostMapping("/resend-otp")
     public ResponseEntity<ApiResponse<String>> resendOtp(
-            @Valid @RequestBody Map<String, @jakarta.validation.constraints.Email String> body) {
+            @Valid @RequestBody Map<String, @Email String> body) {
 
         String email = body.get("email");
-        authService.sendOtp(email);
+        authService.resendOtp(email);
 
-        return ResponseEntity.ok(ApiResponse.success("OTP resent successfully", "OTP sent"));
+        return ResponseEntity.ok(ApiResponse.success(
+                "If this account exists and isn't verified, an OTP has been sent.",
+                "OTP request accepted"));
     }
 }

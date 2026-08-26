@@ -1,9 +1,11 @@
 package app.web.inventory.user.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import app.web.inventory.user.dto.UserDto;
+import app.web.inventory.auth.exception.UnverifiedRegistrationExistsException;
 import app.web.inventory.shared.exception.DuplicateResourceException;
 import app.web.inventory.user.model.Users;
 import app.web.inventory.user.repository.UserRepository;
@@ -21,13 +23,11 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    /** Creates a new unverified local user. */
     public Users createLocalUser(String name, String email, String rawPassword) {
         String normalizedEmail = normalizeEmail(email);
 
-        if (userRepository.findByEmail(normalizedEmail).isPresent()) {
-            throw new DuplicateResourceException("User already exists with email: " + normalizedEmail);
-        }
+        Optional<Users> existing = userRepository.findByEmail(normalizedEmail);
+        existing.ifPresent(this::throwForExisting);
 
         Users user = new Users();
         user.setName(name);
@@ -36,19 +36,24 @@ public class UserService {
         user.setAuthProvider("local");
         user.setVerified(false);
 
-        return userRepository.save(user);
+        try {
+            return userRepository.save(user);
+        } catch (DataIntegrityViolationException raceLoss) {
+            userRepository.findByEmail(normalizedEmail).ifPresent(this::throwForExisting);
+            throw new UnverifiedRegistrationExistsException(
+                    "A user has already registered with this email. "
+                            + "If not verified then request an OTP or contact support.");
+        }
     }
 
-    public Users updatePendingRegistration(Users user, String name, String rawPassword) {
-        if (user.isVerified()) {
-            throw new IllegalStateException("Verified users cannot be updated through registration");
+    private void throwForExisting(Users existingUser) {
+        if (existingUser.isVerified()) {
+            throw new DuplicateResourceException(
+                    "An account already exists with this email. Please log in.");
         }
-
-        user.setName(name);
-        user.setPasswordHash(passwordEncoder.encode(rawPassword));
-        user.setAuthProvider("local");
-
-        return userRepository.save(user);
+        throw new UnverifiedRegistrationExistsException(
+                "A user has already registered with this email. "
+                        + "If not verified then request an OTP or contact support.");
     }
 
     /** Backwards-compatible registration helper for internal callers. */
@@ -74,7 +79,6 @@ public class UserService {
         return userRepository.findByEmail(normalizeEmail(email));
     }
 
-    @SuppressWarnings("null")
     public Optional<Users> findById(UUID id) {
         return userRepository.findById(id);
     }
@@ -86,9 +90,9 @@ public class UserService {
         return passwordEncoder.matches(rawPassword, user.getPasswordHash());
     }
 
-    public Users markVerified(Users user) {
+    public void markVerified(Users user) {
         user.setVerified(true);
-        return userRepository.save(user);
+        userRepository.save(user);
     }
 
     public UserDto convertToDto(Users user) {
