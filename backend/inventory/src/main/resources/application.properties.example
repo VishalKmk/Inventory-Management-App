@@ -9,6 +9,7 @@ spring.jpa.show-sql=true
 # JWT
 app.jwt.secret=
 app.jwt.expiration-ms=
+app.jwt.refresh-expiration-ms=
 
 # OTP
 app.otp.ttl-minutes=10

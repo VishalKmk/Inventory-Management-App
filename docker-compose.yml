@@ -1,0 +1,162 @@
+services:
+
+  nginx:
+    image: nginx:alpine
+    container_name: inventory-nginx
+
+    # Expose HTTP port to host machine
+    ports:
+      - "80:80"
+
+    # Mount custom nginx configuration file (read-only)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+    # Wait for frontend and backend to be ready before starting
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+          condition: service_healthy
+
+    networks:
+      - inventory-network
+
+
+  frontend:
+    # Build frontend from local Dockerfile
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: inventory-frontend
+
+    # Expose port to internal network only (not to host)
+    expose:
+      - "4028"
+
+    # Frontend depends on backend for API calls
+    depends_on:
+      - backend
+
+    networks:
+      - inventory-network
+
+
+  backend:
+    # Build backend from local Dockerfile
+    build:
+      context: ./backend/inventory
+      dockerfile: Dockerfile
+
+    container_name: inventory-backend
+
+    # Expose port to internal network only (not to host)
+    expose:
+      - "8080"
+
+    environment:
+
+      SPRING_PROFILES_ACTIVE: docker
+
+      # MySQL
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+
+      # Redis
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      # JWT
+      APP_JWT_SECRET: ${JWT_SECRET}
+      APP_JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      APP_JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS}
+
+      # OTP
+      APP_OTP_TTL_MINUTES: 10
+
+      # Mail
+      SPRING_MAIL_HOST: ${MAIL_HOST}
+      SPRING_MAIL_PORT: ${MAIL_PORT}
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
+
+      # Google OAuth
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      # Frontend redirect after OAuth
+      APP_OAUTH2_FRONTEND_REDIRECT_URI: ${OAUTH2_FRONTEND_REDIRECT_URI}
+
+    # Wait for MySQL to be healthy and Redis to start before launching
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+      redis:
+        condition: service_started
+
+    networks:
+      - inventory-network
+
+
+  mysql:
+    image: mysql:8.0
+    container_name: inventory-mysql
+
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    # Persist MySQL data in named volume
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+    # Health check to ensure MySQL is ready before backend starts
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p${MYSQL_ROOT_PASSWORD}"
+        ]
+      # Check every 5 seconds, timeout after 5 seconds, retry 10 times
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - inventory-network
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: inventory-redis
+
+    # Persist Redis data in named volume
+    volumes:
+      - redis-data:/data
+
+    networks:
+      - inventory-network
+
+
+networks:
+  # Bridge network for inter-service communication
+  inventory-network:
+    driver: bridge
+
+
+volumes:
+  # Named volumes for data persistence across container restarts
+  mysql-data:
+
+  redis-data:

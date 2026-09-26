@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.springframework.data.redis.connection.ReactiveStreamCommands.AddStreamRecord.body;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -37,12 +39,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
-    @ExceptionHandler(UnverifiedRegistrationExistsException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnverifiedRegistrationExists(
-            UnverifiedRegistrationExistsException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error(ex.getMessage()));
-    }
+//    @ExceptionHandler(UnverifiedRegistrationExistsException.class)
+//    public ResponseEntity<ApiResponse<Void>> handleUnverifiedRegistrationExists(
+//            UnverifiedRegistrationExistsException ex) {
+//        return ResponseEntity.status(HttpStatus.CONFLICT)
+//                .body(ApiResponse.error(ex.getMessage()));
+//    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
@@ -90,11 +92,11 @@ public class GlobalExceptionHandler {
                 .body(new ApiResponse<>(false, ex.getMessage(), dto));
     }
 
-    @ExceptionHandler(OtpResendRateLimitException.class)
-    public ResponseEntity<ApiResponse<Object>> handleOtpResendRateLimitExceeded(OtpResendRateLimitException ex) {
+    @ExceptionHandler(OtpRateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOtpResendRateLimitExceeded(OtpRateLimitExceededException ex) {
         ApiResponse<Object> response = ApiResponse.error(ex.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .header("Retry-After", String.valueOf(ex.getMessage()))
                 .body(response);
     }
 
@@ -104,6 +106,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
                 .body(response);
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

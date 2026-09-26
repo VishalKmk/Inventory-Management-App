@@ -1,5 +1,6 @@
 package app.web.inventory.auth.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -7,7 +8,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginResponseDto {
-    private String token;
+public class RefreshRequest {
+    @NotBlank
     private String refreshToken;
 }

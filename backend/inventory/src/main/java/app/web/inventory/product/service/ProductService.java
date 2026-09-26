@@ -37,7 +37,7 @@ public class ProductService {
     private final SpaceMemberRepository spaceMemberRepository;
 
     public ProductService(ProductRepository productRepository, SpaceService spaceService,
-            AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
+                          AuditLogService auditLogService, SpaceMemberRepository spaceMemberRepository) {
         this.productRepository = productRepository;
         this.spaceService = spaceService;
         this.auditLogService = auditLogService;
@@ -48,8 +48,8 @@ public class ProductService {
      * Create a new product in a specific space.
      */
     public ProductResponseDto createProduct(UUID userId, UUID spaceId, String name, String sku, String category,
-            String imageUrl, Double price,
-            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
+                                            String imageUrl, Double price,
+                                            Integer currentStock, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, userId);
 
@@ -144,8 +144,8 @@ public class ProductService {
 
     // Update product details in a specific space.
     public ProductResponseDto updateProductInSpace(UUID productId, UUID spaceId, UUID ownerId,
-            String name, String sku, String category, String imageUrl,
-            Double price, Integer minimumQuantity, Integer maximumQuantity) {
+                                                   String name, String sku, String category, String imageUrl,
+                                                   Double price, Integer minimumQuantity, Integer maximumQuantity) {
 
         checkWriteAccess(spaceId, ownerId);
 
@@ -153,45 +153,68 @@ public class ProductService {
                 .filter(p -> p.getSpace().getId().equals(spaceId))
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found in this space or access denied"));
 
+        // Resolve each field to "what should end up in the DB", preserving the
+        // original semantics: null param = leave untouched, non-null param goes
+        // through normalizeOptional (so "" clears the field). We diff against the
+        // currently-loaded product purely to build the audit trail below — the
+        // actual write never round-trips the entity, so it can't clobber a
+        // concurrent addStock/removeStock call.
+        String resolvedName = (name != null && !name.trim().isEmpty()) ? name.trim() : product.getName();
+        String resolvedSku = (sku != null) ? normalizeOptional(sku) : product.getSku();
+        String resolvedCategory = (category != null) ? normalizeOptional(category) : product.getCategory();
+        String resolvedImageUrl = (imageUrl != null) ? normalizeOptional(imageUrl) : product.getImageUrl();
+        Double resolvedPrice = (price != null && price >= 0) ? price : product.getPrice();
+        Integer resolvedMinimumQuantity = (minimumQuantity != null && minimumQuantity >= 0)
+                ? minimumQuantity
+                : product.getMinimumQuantity();
+        Integer resolvedMaximumQuantity = (maximumQuantity != null && maximumQuantity >= 0)
+                ? maximumQuantity
+                : product.getMaximumQuantity();
+
         Map<String, Object> changes = new HashMap<>();
-        if (name != null && !name.trim().isEmpty() && !name.trim().equals(product.getName())) {
+        if (!Objects.equals(resolvedName, product.getName())) {
             changes.put("oldName", product.getName());
-            changes.put("newName", name.trim());
-            product.setName(name.trim());
+            changes.put("newName", resolvedName);
         }
-        if (sku != null && !Objects.equals(normalizeOptional(sku), product.getSku())) {
+        if (!Objects.equals(resolvedSku, product.getSku())) {
             changes.put("oldSku", product.getSku());
-            changes.put("newSku", normalizeOptional(sku));
-            product.setSku(normalizeOptional(sku));
+            changes.put("newSku", resolvedSku);
         }
-        if (category != null && !Objects.equals(normalizeOptional(category), product.getCategory())) {
+        if (!Objects.equals(resolvedCategory, product.getCategory())) {
             changes.put("oldCategory", product.getCategory());
-            changes.put("newCategory", normalizeOptional(category));
-            product.setCategory(normalizeOptional(category));
+            changes.put("newCategory", resolvedCategory);
         }
-        if (imageUrl != null && !Objects.equals(normalizeOptional(imageUrl), product.getImageUrl())) {
+        if (!Objects.equals(resolvedImageUrl, product.getImageUrl())) {
             changes.put("oldImageUrl", product.getImageUrl());
-            changes.put("newImageUrl", normalizeOptional(imageUrl));
-            product.setImageUrl(normalizeOptional(imageUrl));
+            changes.put("newImageUrl", resolvedImageUrl);
         }
-        if (price != null && price >= 0 && !price.equals(product.getPrice())) {
+        if (!Objects.equals(resolvedPrice, product.getPrice())) {
             changes.put("oldPrice", product.getPrice());
-            changes.put("newPrice", price);
-            product.setPrice(price);
+            changes.put("newPrice", resolvedPrice);
         }
-        if (minimumQuantity != null && minimumQuantity >= 0 && !minimumQuantity.equals(product.getMinimumQuantity())) {
+        if (!Objects.equals(resolvedMinimumQuantity, product.getMinimumQuantity())) {
             changes.put("oldMinimumQuantity", product.getMinimumQuantity());
-            changes.put("newMinimumQuantity", minimumQuantity);
-            product.setMinimumQuantity(minimumQuantity);
+            changes.put("newMinimumQuantity", resolvedMinimumQuantity);
         }
-        if (maximumQuantity != null && maximumQuantity >= 0 && !maximumQuantity.equals(product.getMaximumQuantity())) {
+        if (!Objects.equals(resolvedMaximumQuantity, product.getMaximumQuantity())) {
             changes.put("oldMaximumQuantity", product.getMaximumQuantity());
-            changes.put("newMaximumQuantity", maximumQuantity);
-            product.setMaximumQuantity(maximumQuantity);
+            changes.put("newMaximumQuantity", resolvedMaximumQuantity);
         }
 
-        @SuppressWarnings("null")
-        Products updatedProduct = productRepository.save(product);
+        productRepository.updateProductDetails(
+                productId,
+                resolvedName,
+                resolvedSku,
+                resolvedCategory,
+                resolvedImageUrl,
+                resolvedPrice,
+                resolvedMinimumQuantity,
+                resolvedMaximumQuantity);
+
+        // Re-fetch so the response and audit log reflect the committed row,
+        // including any concurrent currentStock change we intentionally left alone.
+        Products updatedProduct = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found after update"));
 
         if (!changes.isEmpty()) {
             changes.put("productName", product.getName());
@@ -391,7 +414,7 @@ public class ProductService {
      * Get products by space with pagination.
      */
     public Page<ProductDto> getProductsBySpace(UUID userId, UUID spaceId, String search,
-            int page, int size, String sortBy, String sortDirection) {
+                                               int page, int size, String sortBy, String sortDirection) {
 
         if (!spaceService.hasAccessToSpace(spaceId, userId)) {
             throw new ResourceNotFoundException("Space not found or access denied");

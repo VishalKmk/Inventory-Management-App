@@ -17,15 +17,18 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final LoginRateLimiter loginRateLimiter;
     private final OtpResendRateLimiter otpResendRateLimiter;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(UserService userService, OtpService otpService, EmailService emailService, JwtUtil jwtUtil,
-                       LoginRateLimiter loginRateLimiter, OtpResendRateLimiter otpResendRateLimiter) {
+                       LoginRateLimiter loginRateLimiter, OtpResendRateLimiter otpResendRateLimiter,
+                       RefreshTokenService refreshTokenService) {
         this.userService = userService;
         this.otpService = otpService;
         this.emailService = emailService;
         this.jwtUtil = jwtUtil;
         this.loginRateLimiter = loginRateLimiter;
         this.otpResendRateLimiter = otpResendRateLimiter;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public Users register(String name, String email, String rawPassword) {
@@ -80,7 +83,7 @@ public class AuthService {
         return remaining;
     }
 
-    public String loginWithEmailAndPassword(String email, String rawPassword, String clientIp) {
+    public LoginResult loginWithEmailAndPassword(String email, String rawPassword, String clientIp) {
         String normalizedEmail = UserService.normalizeEmail(email);
 
         loginRateLimiter.checkAllowed(clientIp, normalizedEmail);
@@ -97,10 +100,30 @@ public class AuthService {
         }
 
         loginRateLimiter.recordSuccess(normalizedEmail);
-        return jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+        String accessToken = jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+        String refreshToken = refreshTokenService.issue(user.getId());
+        return new LoginResult(accessToken, refreshToken);
     }
 
-    public String generateTokenForUser(Users user) {
-        return jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+    public LoginResult generateTokensForUser(Users user) {
+        String accessToken = jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+        String refreshToken = refreshTokenService.issue(user.getId());
+        return new LoginResult(accessToken, refreshToken);
+    }
+
+    public LoginResult refresh(String presentedRefreshToken) {
+        RefreshTokenService.RotationResult rotation = refreshTokenService.rotate(presentedRefreshToken);
+        Users user = userService.findById(rotation.userId())
+                .orElseThrow(() -> new IllegalStateException("User no longer exists"));
+
+        String accessToken = jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+        return new LoginResult(accessToken, rotation.newRefreshToken());
+    }
+
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+    }
+
+    public record LoginResult(String accessToken, String refreshToken) {
     }
 }

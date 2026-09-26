@@ -5,6 +5,7 @@ import app.web.inventory.auth.dto.LoginRequest;
 import app.web.inventory.auth.dto.LoginResponseDto;
 import app.web.inventory.auth.dto.OtpRequest;
 import app.web.inventory.auth.dto.OtpVerifyResponseDto;
+import app.web.inventory.auth.dto.RefreshRequest;
 import app.web.inventory.auth.dto.RegisterRequest;
 import app.web.inventory.user.dto.UserResponseDto;
 import jakarta.validation.Valid;
@@ -62,9 +63,32 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@Valid @RequestBody LoginRequest request) {
         String clientIp = RequestUtil.getClientIpAddress();
-        String token = authService.loginWithEmailAndPassword(request.getEmail(), request.getPassword(), clientIp);
-        LoginResponseDto loginResponse = new LoginResponseDto(token);
+        AuthService.LoginResult result =
+                authService.loginWithEmailAndPassword(request.getEmail(), request.getPassword(), clientIp);
+        LoginResponseDto loginResponse = new LoginResponseDto(result.accessToken(), result.refreshToken());
         return ResponseEntity.ok(ApiResponse.success("Login successful", loginResponse));
+    }
+
+    /**
+     * Exchange a refresh token for a new access token + rotated refresh token.
+     * POST /api/auth/refresh
+     **/
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<LoginResponseDto>> refresh(@Valid @RequestBody RefreshRequest request) {
+        AuthService.LoginResult result = authService.refresh(request.getRefreshToken());
+        LoginResponseDto loginResponse = new LoginResponseDto(result.accessToken(), result.refreshToken());
+        return ResponseEntity.ok(ApiResponse.success("Token refreshed", loginResponse));
+    }
+
+    /**
+     * Revoke a refresh token. The access token stays valid until it naturally
+     * expires (it's stateless) — this only stops it from being silently renewed.
+     * POST /api/auth/logout
+     **/
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshRequest request) {
+        authService.logout(request.getRefreshToken());
+        return ResponseEntity.ok(ApiResponse.success("Logged out", null));
     }
 
     /**

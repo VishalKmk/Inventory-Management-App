@@ -6,10 +6,11 @@ import { Eye, EyeOff, Copy, Check, TrendingUp, ShieldCheck, BarChart3 } from 'lu
 import { toast } from 'sonner';
 import AppLogo from '@/components/ui/AppLogo';
 import AppImage from '@/components/ui/AppImage';
-import { apiFetch, API_BASE_URL } from '@/lib/api';
+import { apiFetch, API_BASE_URL, storeTokens } from '@/lib/api';
 
 interface LoginResponse {
   token: string;
+  refreshToken: string;
 }
 
 interface LoginFormValues {
@@ -31,10 +32,11 @@ export default function LoginPageContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const token = params.get('token');
+    const refreshToken = params.get('refreshToken');
     const error = new URLSearchParams(window.location.search).get('error');
 
-    if (token) {
-      localStorage.setItem('inventory_token', token);
+    if (token && refreshToken) {
+      storeTokens({ token, refreshToken });
       window.history.replaceState(null, '', window.location.pathname);
       toast.success('Signed in with Google');
       window.location.assign('/spaces');
@@ -60,7 +62,7 @@ export default function LoginPageContent() {
         method: 'POST',
         body: JSON.stringify({ email: data.email, password: data.password }),
       });
-      localStorage.setItem('inventory_token', response.token);
+      storeTokens(response);
       toast.success('Signed in successfully');
       window.location.href = '/spaces';
     } catch (error) {

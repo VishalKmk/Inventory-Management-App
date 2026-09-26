@@ -29,6 +29,30 @@ public interface ProductRepository extends JpaRepository<Products, UUID> {
             "AND (p.maximumQuantity IS NULL OR p.currentStock + :quantity <= p.maximumQuantity)")
     int incrementStock(@Param("productId") UUID productId, @Param("quantity") Integer quantity);
 
+    // Atomically update product detail fields only — never touches currentStock,
+    // so this can't race with incrementStock/decrementStock and clobber a
+    // concurrent stock change. COALESCE keeps each column unchanged when the
+    // caller passes null (i.e. "field not being updated").
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE Products p SET " +
+            "p.name = COALESCE(:name, p.name), " +
+            "p.sku = :sku, " +
+            "p.category = :category, " +
+            "p.imageUrl = :imageUrl, " +
+            "p.price = COALESCE(:price, p.price), " +
+            "p.minimumQuantity = COALESCE(:minimumQuantity, p.minimumQuantity), " +
+            "p.maximumQuantity = COALESCE(:maximumQuantity, p.maximumQuantity) " +
+            "WHERE p.id = :productId")
+    void updateProductDetails(
+            @Param("productId") UUID productId,
+            @Param("name") String name,
+            @Param("sku") String sku,
+            @Param("category") String category,
+            @Param("imageUrl") String imageUrl,
+            @Param("price") Double price,
+            @Param("minimumQuantity") Integer minimumQuantity,
+            @Param("maximumQuantity") Integer maximumQuantity);
+
     // Delete all products in a specific space
     void deleteBySpaceId(UUID spaceId);
 
@@ -44,7 +68,7 @@ public interface ProductRepository extends JpaRepository<Products, UUID> {
     // Paginated
     @Query("SELECT p FROM Products p WHERE p.space.id = :spaceId AND LOWER(p.name) LIKE LOWER(CONCAT('%', :name, '%'))")
     Page<Products> findBySpaceIdAndNameContainingIgnoreCase(@Param("spaceId") UUID spaceId, @Param("name") String name,
-            Pageable pageable);
+                                                            Pageable pageable);
 
     // Find all products owned by a user (across all their spaces)
     @Query("SELECT p FROM Products p WHERE p.space.owner.id = :ownerId")

@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
+import app.web.inventory.auth.service.RefreshTokenService;
 import app.web.inventory.user.model.Users;
 import app.web.inventory.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,14 +19,17 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
     private final String frontendRedirectUri;
 
     public OAuth2SuccessHandler(
             UserService userService,
             JwtUtil jwtUtil,
+            RefreshTokenService refreshTokenService,
             @Value("${app.oauth2.frontend-redirect-uri}") String frontendRedirectUri) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
+        this.refreshTokenService = refreshTokenService;
         this.frontendRedirectUri = frontendRedirectUri;
     }
 
@@ -48,7 +52,8 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
         Users user = userService.findOrCreateGoogleUser(email, name != null ? name : email);
 
         String token = jwtUtil.generateToken(user.getId().toString(), user.getEmail());
+        String refreshToken = refreshTokenService.issue(user.getId());
 
-        response.sendRedirect(frontendRedirectUri + "#token=" + token);
+        response.sendRedirect(frontendRedirectUri + "#token=" + token + "&refreshToken=" + refreshToken);
     }
 }
